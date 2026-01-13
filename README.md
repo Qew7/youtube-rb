@@ -1,44 +1,18 @@
 # YoutubeRb
 
-A **Ruby library** inspired by [youtube-dl](https://github.com/ytdl-org/youtube-dl) for downloading videos, extracting video segments, and fetching subtitles from YouTube and other video platforms.
+A Ruby library for downloading videos, extracting video segments, and fetching subtitles from YouTube and other video platforms. Inspired by [youtube-dl](https://github.com/ytdl-org/youtube-dl) and powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
 ## Features
 
 - 🔧 **yt-dlp Backend** - Reliable video downloads with full YouTube support
 - 📹 Download full videos or audio-only
-- ✂️ Extract video segments (10-60 seconds) 
+- ✂️ Extract video segments (customizable duration limits)
 - ⚡ **Optimized batch segment downloads** - Download video once, extract multiple segments locally (10-100x faster)
-- 📝 Download subtitles (manual and auto-generated)
-- 🎵 Extract audio in various formats (mp3, aac, opus, etc.)
+- 📝 Download subtitles (manual and auto-generated) with automatic trimming for segments
+- 🎵 Extract audio in various formats (mp3, aac, opus, flac, etc.)
 - 📊 Get detailed video information
 - 🔧 Flexible configuration options
 - 🌐 Support for cookies and authentication
-
-## Backend
-
-YoutubeRb uses **yt-dlp** as its backend for reliable video downloads:
-
-### yt-dlp (Required for segment downloads)
-- Most reliable method for YouTube downloads
-- Handles signature decryption automatically
-- Works with all YouTube videos
-- Bypasses 403 errors
-- Supports authentication via cookies
-- **Optimized for batch processing**: Downloads video once, extracts multiple segments locally
-
-**Note**: yt-dlp is **required** for segment downloads (`download_segment` and `download_segments` methods). Full video downloads still support Pure Ruby fallback with automatic retry using yt-dlp.
-
-## Important Notes
-
-⚠️ **YouTube Protection**: YouTube actively protects videos with:
-- Signature encryption (handled by yt-dlp)
-- Bot detection (requires proper headers and cookies)
-- Rate limiting (handled automatically)
-
-💡 **Batch Optimization**: When downloading multiple segments from the same video, the library automatically:
-1. Downloads the full video **once** via yt-dlp
-2. Extracts all segments locally using FFmpeg
-3. Result: **10-100x faster** than downloading each segment separately
 
 ## Installation
 
@@ -60,13 +34,13 @@ Or install it yourself as:
 
 ### Ruby Version
 
-- Ruby >= 2.7.0
+- Ruby >= 3.4.0
 
 ### External Tools
 
-#### yt-dlp (Strongly Recommended)
+#### yt-dlp (Required for segment downloads)
 
-For reliable downloads and to avoid 403 errors, install yt-dlp:
+Install yt-dlp for reliable downloads and to avoid 403 errors:
 
 ```bash
 # Using pip (recommended)
@@ -82,11 +56,13 @@ brew install yt-dlp
 # https://github.com/yt-dlp/yt-dlp/releases
 ```
 
+**Note**: yt-dlp is **required** for segment downloads (`download_segment` and `download_segments` methods). Full video downloads support Pure Ruby fallback with automatic retry using yt-dlp.
+
 #### FFmpeg (Optional)
 
 Required only for:
 - Audio extraction from video
-- Segment extraction (10-60 second clips)
+- Segment extraction (time-based clips)
 - Format conversion
 
 ```bash
@@ -108,26 +84,22 @@ client.check_dependencies
 # => { ffmpeg: true, ytdlp: true, ytdlp_version: "2024.01.13" }
 ```
 
-## Usage
-
-### Quick Start
+## Quick Start
 
 ```ruby
 require 'youtube-rb'
 
-# 1. Simple download (automatically uses yt-dlp if available)
+# Simple download
 YoutubeRb.download('https://www.youtube.com/watch?v=VIDEO_ID', 
   output_path: './downloads'
 )
 
-# 2. Get video information
-info = YoutubeRb.info('https://www.youtube.com/watch?v=jNQXAC9IVRw')
+# Get video information
+info = YoutubeRb.info('https://www.youtube.com/watch?v=VIDEO_ID')
 puts "Title: #{info.title}"
 puts "Duration: #{info.duration_formatted}"
-puts "Views: #{info.view_count}"
 
-# 3. Download single segment (10-60 seconds by default)
-# Requires yt-dlp to be installed
+# Download single segment (requires yt-dlp)
 YoutubeRb.download_segment(
   'https://www.youtube.com/watch?v=VIDEO_ID',
   60,  # start time in seconds
@@ -135,9 +107,7 @@ YoutubeRb.download_segment(
   output_path: './segments'
 )
 
-# 4. Download multiple segments (batch processing - OPTIMIZED!)
-# Downloads video ONCE via yt-dlp, then extracts all segments locally
-# This is 10-100x faster than downloading each segment separately
+# Download multiple segments (batch processing - 10-100x faster!)
 YoutubeRb.download_segments(
   'https://www.youtube.com/watch?v=VIDEO_ID',
   [
@@ -147,58 +117,205 @@ YoutubeRb.download_segments(
   ],
   output_path: './segments'
 )
+```
 
-# 5. Download only subtitles
-YoutubeRb.download_subtitles(
-  'https://www.youtube.com/watch?v=VIDEO_ID',
-  langs: ['en', 'ru'],
-  output_path: './subs'
+## Usage
+
+### Creating a Client
+
+```ruby
+require 'youtube-rb'
+
+# Basic client
+client = YoutubeRb::Client.new
+
+# Client with options
+client = YoutubeRb::Client.new(
+  output_path: './downloads',
+  use_ytdlp: true,
+  verbose: true,
+  write_subtitles: true,
+  subtitle_langs: ['en']
 )
 ```
 
-### Backend Configuration
+### Download Methods
+
+#### Full Video Download
 
 ```ruby
-# Recommended: Enable verbose mode to see what's happening
-client = YoutubeRb::Client.new(verbose: true)
-client.download(url)
-# [YoutubeRb] Using yt-dlp backend for download
-# [YoutubeRb] Downloaded successfully with yt-dlp: ./downloads/video.mp4
+# Simple download
+client.download('https://www.youtube.com/watch?v=VIDEO_ID')
 
-# Full video downloads: Pure Ruby with yt-dlp fallback (default)
+# With automatic fallback (default behavior)
 client = YoutubeRb::Client.new(ytdlp_fallback: true)
 client.download(url)  # Tries Pure Ruby first, falls back to yt-dlp on 403
 
-# Segment downloads: Always use yt-dlp (required)
-client.download_segment(url, 10, 30)  # Requires yt-dlp
-client.download_segments(url, segments)  # Requires yt-dlp, optimized for batch
-```
-
-### Fixing 403 Errors
-
-If you encounter 403 errors:
-
-**Option 1: Use yt-dlp backend (easiest)**
-```ruby
+# Force yt-dlp backend (recommended for reliability)
 client = YoutubeRb::Client.new(use_ytdlp: true)
 client.download(url)
 ```
 
-**Option 2: Export cookies from browser**
-1. Install extension: [Get cookies.txt LOCALLY](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) (Chrome) or [cookies.txt](https://addons.mozilla.org/firefox/addon/cookies-txt/) (Firefox)
-2. Log into YouTube in your browser
-3. Export cookies from youtube.com
-4. Use cookies:
+#### Single Segment Download
+
+```ruby
+# Download 30-second segment
+output_file = client.download_segment(
+  'https://www.youtube.com/watch?v=VIDEO_ID',
+  60,   # start time in seconds
+  90    # end time in seconds
+)
+
+# With custom output filename
+client.download_segment(
+  url, 120, 150,
+  output_file: './my_segment.mp4'
+)
+
+# Configure segment duration limits (default: 10-60 seconds)
+client = YoutubeRb::Client.new(
+  min_segment_duration: 5,    # minimum 5 seconds
+  max_segment_duration: 300   # maximum 5 minutes
+)
+```
+
+**Performance Note**: By default, segments use **fast mode** (10x faster). Cuts may be off by a few seconds due to keyframe positions. For frame-accurate cuts:
+
+```ruby
+# Fast mode (default) - 10x faster, cuts at keyframes
+client = YoutubeRb::Client.new(segment_mode: :fast)
+
+# Precise mode - frame-accurate but slow (re-encodes video)
+client = YoutubeRb::Client.new(segment_mode: :precise)
+```
+
+#### Batch Segment Download
+
+For downloading multiple segments from one video, use `download_segments` for optimal performance:
+
+```ruby
+url = 'https://www.youtube.com/watch?v=VIDEO_ID'
+
+segments = [
+  { start: 0, end: 30 },
+  { start: 60, end: 90 },
+  { start: 120, end: 150 }
+]
+
+output_files = client.download_segments(url, segments)
+# => ["./segments/video-segment-0-30.mp4", ...]
+
+# With custom filenames
+segments = [
+  { start: 0, end: 30, output_file: './intro.mp4' },
+  { start: 60, end: 90, output_file: './main.mp4' },
+  { start: 300, end: 330, output_file: './outro.mp4' }
+]
+
+client.download_segments(url, segments)
+```
+
+**Benefits of Batch Processing:**
+- **10-100x faster**: Video downloaded via yt-dlp once, all segments extracted locally with FFmpeg
+- **Bandwidth savings**: Full video loaded once instead of N times
+- **Reliability**: Uses yt-dlp to bypass YouTube protection
+
+#### Subtitles Download
+
+```ruby
+# Download subtitles with video
+client = YoutubeRb::Client.new(
+  write_subtitles: true,
+  subtitle_langs: ['en', 'ru']
+)
+client.download(url)
+
+# Download subtitles only
+client.download_subtitles(url, langs: ['en', 'ru'])
+
+# Check available subtitle languages
+info = client.info(url)
+puts info.available_subtitle_languages.join(', ')
+
+# Subtitles are automatically trimmed for segments
+client.download_segment(url, 60, 90)
+# Creates: video-segment-60-90.mp4 and video-segment-60-90.en.srt
+```
+
+#### Audio Extraction
+
+```ruby
+# Extract audio in MP3
+client.extract_audio(url, format: 'mp3', quality: '192')
+
+# Other formats
+client.extract_audio(url, format: 'aac', quality: '128')
+client.extract_audio(url, format: 'opus')
+client.extract_audio(url, format: 'flac')  # lossless
+
+# Or configure client to extract audio by default
+client = YoutubeRb::Client.new(
+  extract_audio: true,
+  audio_format: 'mp3',
+  audio_quality: '320'
+)
+client.download(url)  # Downloads audio only
+```
+
+### Video Information
+
+```ruby
+info = client.info('https://www.youtube.com/watch?v=VIDEO_ID')
+
+puts info.title
+puts info.description
+puts info.duration_formatted  # "01:23:45"
+puts info.view_count
+puts info.uploader
+
+# Available formats
+info.available_formats.each do |format_id|
+  format = info.get_format(format_id)
+  puts "#{format[:format_id]}: #{format[:height]}p"
+end
+
+# Best quality formats
+best = info.best_format
+video_only = info.best_video_format
+audio_only = info.best_audio_format
+```
+
+### Authentication and Cookies
+
+For age-restricted, private, or member-only videos, or to bypass 403 errors:
+
+#### Export Cookies from Browser (Most Reliable)
+
+1. **Install browser extension:**
+   - Chrome/Edge: [Get cookies.txt LOCALLY](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
+   - Firefox: [cookies.txt](https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/)
+
+2. **Log into YouTube** in your browser
+
+3. **Export cookies** from youtube.com (Netscape format)
+
+4. **Use cookies in YoutubeRb:**
 
 ```ruby
 client = YoutubeRb::Client.new(
   cookies_file: './youtube_cookies.txt',
-  use_ytdlp: true
+  use_ytdlp: true,
+  verbose: true
 )
-client.download(url)
+client.download('https://www.youtube.com/watch?v=VIDEO_ID')
 ```
 
-### Common Configuration Options
+**Important Notes:**
+- 🔒 **Keep your cookies file secure** - it contains your session data
+- 🔄 **Cookies expire** - re-export if you get 403 errors again
+- 💡 **Use yt-dlp backend** for best cookie handling
+
+## Configuration Options
 
 ```ruby
 client = YoutubeRb::Client.new(
@@ -207,20 +324,23 @@ client = YoutubeRb::Client.new(
   ytdlp_fallback: true,         # Auto fallback on error (default)
   verbose: true,                # Show progress logs
   
-  # Segment options
-  segment_mode: :fast,          # :fast (default, 10x faster) or :precise (frame-accurate)
-  min_segment_duration: 10,     # Minimum segment duration in seconds (default: 10)
-  max_segment_duration: 60,     # Maximum segment duration in seconds (default: 60)
-  cache_full_video: false,      # Cache full video for multiple segments (default: false, auto-enabled for batch)
-  
   # Output
   output_path: './downloads',
   output_template: '%(title)s-%(id)s.%(ext)s',
+  no_overwrites: true,          # Don't overwrite existing files
+  continue_download: true,      # Resume interrupted downloads
   
   # Quality
   quality: 'best',              # or '1080p', '720p', etc.
+  format: 'best',
   
-  # Audio extraction
+  # Segment Options
+  segment_mode: :fast,          # :fast (10x faster) or :precise (frame-accurate)
+  min_segment_duration: 10,     # Minimum segment duration in seconds
+  max_segment_duration: 60,     # Maximum segment duration in seconds
+  cache_full_video: false,      # Cache full video for multiple segments (auto-enabled for batch)
+  
+  # Audio Extraction
   extract_audio: true,
   audio_format: 'mp3',          # mp3, aac, opus, flac, wav
   audio_quality: '192',
@@ -228,7 +348,7 @@ client = YoutubeRb::Client.new(
   # Subtitles
   write_subtitles: true,
   subtitle_langs: ['en', 'ru'],
-  subtitle_format: 'srt',       # srt or vtt
+  subtitle_format: 'srt',       # srt, vtt, or ass
   
   # Metadata
   write_info_json: true,
@@ -240,347 +360,52 @@ client = YoutubeRb::Client.new(
   
   # Network
   retries: 10,
+  rate_limit: '1M',
   user_agent: 'Mozilla/5.0...'
 )
 ```
 
-### Основные примеры
+## Troubleshooting
 
-#### Создание клиента с настройками
+### 403 Errors or Bot Detection
 
+**Option 1: Use yt-dlp backend (easiest)**
 ```ruby
-require 'youtube-rb'
-
-client = YoutubeRb::Client.new(
-  output_path: './downloads',
-  write_subtitles: true,
-  subtitle_langs: ['en', 'ru']
-)
-
-# Скачать видео
-client.download('https://www.youtube.com/watch?v=VIDEO_ID')
+client = YoutubeRb::Client.new(use_ytdlp: true, verbose: true)
+client.download(url)
 ```
 
-#### Скачивание сегментов видео (главная функция)
-
-Скачивание определенных интервалов видео (10-60 секунд по умолчанию):
-
+**Option 2: Export cookies from browser**
 ```ruby
-client = YoutubeRb::Client.new(output_path: './segments')
-
-# Скачать 30-секундный сегмент начиная с 1:00
-output_file = client.download_segment(
-  'https://www.youtube.com/watch?v=VIDEO_ID',
-  60,   # начало в секундах
-  90    # конец в секундах
-)
-
-# С указанием имени файла
-client.download_segment(
-  'https://www.youtube.com/watch?v=VIDEO_ID',
-  120, 150,
-  output_file: './my_segment.mp4'
-)
-
-# Ограничения по умолчанию: сегмент должен быть от 10 до 60 секунд
-client.download_segment(url, 0, 10)    # ✓ Валидно (10 секунд)
-client.download_segment(url, 0, 60)    # ✓ Валидно (60 секунд)
-client.download_segment(url, 0, 5)     # ✗ Ошибка (слишком короткий)
-client.download_segment(url, 0, 120)   # ✗ Ошибка (слишком длинный)
-
-# Настройка пользовательских ограничений длительности
-client = YoutubeRb::Client.new(
-  output_path: './segments',
-  min_segment_duration: 5,    # минимум 5 секунд
-  max_segment_duration: 300   # максимум 5 минут
-)
-
-client.download_segment(url, 0, 5)     # ✓ Валидно с новыми настройками
-client.download_segment(url, 0, 300)   # ✓ Валидно (5 минут)
-```
-
-**⚡ Performance Note**: By default, segments use **fast mode** (10x faster). 
-Cuts may be off by a few seconds due to keyframe positions. For frame-accurate cuts:
-
-```ruby
-# Fast mode (default) - 10x faster, cuts at keyframes
-client = YoutubeRb::Client.new(segment_mode: :fast)
-
-# Precise mode - frame-accurate but slow (re-encodes video)
-client = YoutubeRb::Client.new(segment_mode: :precise)
-```
-
-See [PERFORMANCE.md](PERFORMANCE.md) for detailed performance comparison and recommendations.
-
-#### Пакетная загрузка сегментов (новое!)
-
-Для загрузки нескольких сегментов из одного видео используйте `download_segments`:
-
-```ruby
-client = YoutubeRb::Client.new(output_path: './segments')
-
-url = 'https://www.youtube.com/watch?v=VIDEO_ID'
-
-segments = [
-  { start: 0, end: 30 },      # Первые 30 секунд
-  { start: 60, end: 90 },     # 1:00 - 1:30
-  { start: 120, end: 150 }    # 2:00 - 2:30
-]
-
-# Загрузит все сегменты эффективно
-output_files = client.download_segments(url, segments)
-# => ["./segments/video-segment-0-30.mp4", "./segments/video-segment-60-90.mp4", ...]
-
-puts "Downloaded #{output_files.size} segments"
-```
-
-**Преимущества пакетной загрузки:**
-
-- **Оптимизация yt-dlp**: Видео скачивается через yt-dlp **один раз**, все сегменты вырезаются локально через FFmpeg
-- **Быстрее в 10-100x**: Не нужно перекачивать видео для каждого сегмента
-- **Экономия трафика**: Полное видео загружается один раз вместо N раз
-- **Надежность**: Использует yt-dlp для обхода защиты YouTube, FFmpeg для быстрой нарезки
-
-```ruby
-# С пользовательскими именами файлов
-segments = [
-  { start: 0, end: 30, output_file: './intro.mp4' },
-  { start: 60, end: 90, output_file: './main.mp4' },
-  { start: 300, end: 330, output_file: './outro.mp4' }
-]
-
-client.download_segments(url, segments)
-
-# Явное управление кэшированием (по умолчанию включено для batch)
-client = YoutubeRb::Client.new(
-  output_path: './segments',
-  cache_full_video: false  # отключить кэш (медленнее)
-)
-
-# Или переопределить при вызове
-client.download_segments(url, segments, cache_full_video: true)
-```
-
-#### Скачивание субтитров
-
-```ruby
-client = YoutubeRb::Client.new(
-  output_path: './downloads',
-  write_subtitles: true,
-  subtitle_langs: ['en', 'ru']
-)
-
-# При скачивании сегмента субтитры автоматически обрезаются
-client.download_segment(url, 60, 90)
-# Создаст: video-segment-60-90.mp4 и video-segment-60-90.en.srt
-
-# Скачать только субтитры (без видео)
-client.download_subtitles(url, langs: ['en', 'ru'])
-
-# Проверить доступные языки субтитров
-info = client.info(url)
-puts info.available_subtitle_languages.join(', ')
-```
-
-#### Извлечение аудио
-
-```ruby
-# Извлечь аудио в MP3
-client.extract_audio(url, format: 'mp3', quality: '192')
-
-# Другие форматы
-client.extract_audio(url, format: 'aac', quality: '128')
-client.extract_audio(url, format: 'opus')
-client.extract_audio(url, format: 'flac')  # без потерь
-
-# Или через настройки клиента
-client = YoutubeRb::Client.new(
-  extract_audio: true,
-  audio_format: 'mp3',
-  audio_quality: '320'
-)
-client.download(url)  # скачает только аудио
-```
-
-#### Получение информации о видео
-
-```ruby
-info = client.info('https://www.youtube.com/watch?v=VIDEO_ID')
-
-puts info.title
-puts info.description
-puts info.duration_formatted  # "01:23:45"
-puts info.view_count
-puts info.uploader
-
-# Доступные форматы
-info.available_formats.each do |format_id|
-  format = info.get_format(format_id)
-  puts "#{format[:format_id]}: #{format[:height]}p"
-end
-
-# Лучшее качество
-best = info.best_format
-video_only = info.best_video_format
-audio_only = info.best_audio_format
-```
-
-### Настройки (Options)
-
-```ruby
-client = YoutubeRb::Client.new(
-  # Основные
-  output_path: './downloads',
-  output_template: '%(title)s-%(id)s.%(ext)s',
-  format: 'best',
-  quality: 'best',
-  
-  # Сегменты
-  segment_mode: :fast,          # :fast (быстро) или :precise (точно)
-  min_segment_duration: 10,     # минимальная длительность сегмента (секунды)
-  max_segment_duration: 60,     # максимальная длительность сегмента (секунды)
-  cache_full_video: false,      # кэшировать полное видео для нескольких сегментов
-  
-  # Субтитры
-  write_subtitles: true,
-  subtitle_format: 'srt',       # srt, vtt, ass
-  subtitle_langs: ['en', 'ru'],
-  
-  # Аудио
-  extract_audio: false,
-  audio_format: 'mp3',          # mp3, aac, opus, flac, wav
-  audio_quality: '192',
-  
-  # Файловая система
-  no_overwrites: true,          # не перезаписывать файлы
-  continue_download: true,      # продолжать прерванные загрузки
-  write_description: true,
-  write_info_json: true,
-  write_thumbnail: true,
-  
-  # Сеть
-  rate_limit: '1M',            # ограничение скорости
-  retries: 10,
-  user_agent: 'Mozilla/5.0...',
-  
-  # Аутентификация (если нужна)
-  cookies_file: './cookies.txt',
-  username: 'user',
-  password: 'pass'
-)
-```
-
-### Authentication and Cookies (Bypassing 403 Errors)
-
-For age-restricted, private, member-only videos or to bypass 403 errors:
-
-#### Method 1: Export cookies from browser (Most Reliable)
-
-1. **Install browser extension to export cookies:**
-   - Chrome/Edge: [Get cookies.txt LOCALLY](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
-   - Firefox: [cookies.txt](https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/)
-
-2. **Log into YouTube** in your browser
-
-3. **Export cookies** from youtube.com (Netscape format)
-
-4. **Use cookies in YoutubeRb:**
-
-```ruby
-# With yt-dlp backend (recommended - automatic cookie handling)
 client = YoutubeRb::Client.new(
   cookies_file: './youtube_cookies.txt',
-  use_ytdlp: true,
-  verbose: true
+  use_ytdlp: true
 )
-client.download('https://www.youtube.com/watch?v=VIDEO_ID')
-
-# Pure Ruby backend also supports cookies
-client = YoutubeRb::Client.new(
-  cookies_file: './youtube_cookies.txt',
-  use_ytdlp: false,
-  ytdlp_fallback: true  # Falls back to yt-dlp on 403
-)
+client.download(url)
 ```
 
-#### Method 2: Let yt-dlp extract cookies from browser (Easiest)
+**Option 3: Enable fallback mode** (default)
+```ruby
+client = YoutubeRb::Client.new(ytdlp_fallback: true)
+# Tries Pure Ruby first, falls back to yt-dlp on 403
+```
 
-yt-dlp can directly read cookies from your browser:
+### No Formats Found / Video Unavailable
 
+- Use yt-dlp backend: `YoutubeRb::Client.new(use_ytdlp: true)`
+- Export cookies from authenticated browser session
+- Check if video is available in your region
+- Verify the video is public and not deleted
+
+### FFmpeg Not Found
+
+For segment downloads, FFmpeg is required:
 ```bash
-# First, ensure browser is closed or use the right browser
-yt-dlp --cookies-from-browser chrome <URL>
+which ffmpeg          # check
+brew install ffmpeg   # install (macOS)
 ```
 
-**Note:** This feature requires specific system dependencies and may not work on all platforms. Cookie file export (Method 1) is more reliable.
-
-#### Cookie file format example (Netscape)
-
-```
-# Netscape HTTP Cookie File
-.youtube.com	TRUE	/	TRUE	0	CONSENT	YES+
-.youtube.com	TRUE	/	FALSE	1735689600	VISITOR_INFO1_LIVE	xxxxx
-```
-
-#### Important Notes
-
-- ⚠️ **Username/password authentication** is NOT supported (YouTube uses OAuth)
-- 🔒 **Keep your cookies file secure** - it contains your session data
-- 🔄 **Cookies expire** - re-export if you get 403 errors again
-- 💡 **Use yt-dlp backend** for best cookie handling
-
-### Полный пример: скачивание нескольких сегментов
-
-```ruby
-require 'youtube-rb'
-
-client = YoutubeRb::Client.new(
-  output_path: './highlights',
-  write_subtitles: true,
-  subtitle_langs: ['en'],
-  use_ytdlp: true,         # рекомендуется для надежности
-  cache_full_video: true   # кэширование для быстрой обработки
-)
-
-url = 'https://www.youtube.com/watch?v=VIDEO_ID'
-
-# Вариант 1: Пакетная загрузка (рекомендуется, быстрее)
-segments = [
-  { start: 0, end: 30, output_file: './highlights/intro.mp4' },
-  { start: 120, end: 150, output_file: './highlights/main.mp4' },
-  { start: 300, end: 330, output_file: './highlights/conclusion.mp4' }
-]
-
-begin
-  output_files = client.download_segments(url, segments)
-  output_files.each_with_index do |file, i|
-    puts "✓ Segment #{i+1}: #{file}"
-  end
-rescue => e
-  puts "✗ Error: #{e.message}"
-end
-
-# Вариант 2: По одному (если нужен контроль над каждым сегментом)
-segments_old_way = [
-  { start: 0, end: 30, name: 'intro' },
-  { start: 120, end: 150, name: 'main' },
-  { start: 300, end: 330, name: 'conclusion' }
-]
-
-segments_old_way.each do |seg|
-  begin
-    output = client.download_segment(
-      url, seg[:start], seg[:end],
-      output_file: "./highlights/#{seg[:name]}.mp4"
-    )
-    puts "✓ #{seg[:name]}: #{output}"
-  rescue => e
-    puts "✗ #{seg[:name]}: #{e.message}"
-  end
-end
-```
-
-### Обработка ошибок
+## Error Handling
 
 ```ruby
 begin
@@ -588,107 +413,30 @@ begin
   output = client.download_segment(url, 60, 90)
   puts "Success: #{output}"
 rescue YoutubeRb::ExtractionError => e
-  puts "Не удалось извлечь данные: #{e.message}"
+  puts "Failed to extract data: #{e.message}"
 rescue YoutubeRb::DownloadError => e
-  puts "Ошибка загрузки: #{e.message}"
+  puts "Download error: #{e.message}"
+rescue YoutubeRb::ValidationError => e
+  puts "Validation error: #{e.message}"
 rescue => e
-  puts "Ошибка: #{e.message}"
+  puts "Error: #{e.message}"
 end
 ```
 
-## Архитектура
+## Architecture
 
-- **Client** - Основной интерфейс для всех операций
-- **Options** - Управление конфигурацией
-- **Extractor** - Извлекает информацию о видео из HTML/JSON YouTube
-- **VideoInfo** - Представляет метаданные видео
-- **Downloader** - Обрабатывает загрузку видео и субтитров через HTTP
-
-## Comparison with youtube-dl
-
-This gem provides a Ruby-native API inspired by youtube-dl but designed as a library rather than a command-line tool:
-
-| Feature | youtube-dl | youtube-rb |
-|---------|-----------|------------|
-| Language | Python CLI | Ruby Library |
-| Implementation | Python executable | Pure Ruby gem |
-| Usage | Command line | Programmatic API |
-| Dependencies | Python + ffmpeg | Ruby + ffmpeg (optional) |
-| Segment Download | Manual with ffmpeg | Built-in method |
-| Subtitle Trimming | Manual | Automatic for segments |
-| Configuration | CLI arguments | Ruby objects |
-| Bot Detection | Less common | May require cookies |
-
-## Решение проблем
-
-### Ошибка "LOGIN_REQUIRED" или блокировка бота
-
-If you're getting 403 errors or bot detection:
-
-1. **Use yt-dlp backend (most reliable)**:
-   ```ruby
-   client = YoutubeRb::Client.new(use_ytdlp: true, verbose: true)
-   client.download(url)
-   ```
-
-2. **Export and use cookies from authenticated browser session**:
-   ```ruby
-   client = YoutubeRb::Client.new(
-     cookies_file: './youtube_cookies.txt',
-     use_ytdlp: true
-   )
-   ```
-
-3. **Enable fallback mode** (default):
-   ```ruby
-   client = YoutubeRb::Client.new(ytdlp_fallback: true)
-   # Tries pure Ruby first, falls back to yt-dlp on 403
-   ```
-
-4. **Add delays between requests**:
-   ```ruby
-   videos.each do |url|
-     client.download(url)
-     sleep 2
-   end
-   ```
-
-### No formats found / Video unavailable
-
-Try:
-- Use yt-dlp backend: `YoutubeRb::Client.new(use_ytdlp: true)`
-- Export cookies from authenticated browser session
-- Check if video is available in your region
-- Verify the video is public and not deleted
-- Check yt-dlp directly: `yt-dlp --cookies ./cookies.txt <URL>`
-
-### FFmpeg не найден
-
-Для работы с сегментами нужен FFmpeg:
-```bash
-which ffmpeg          # проверить
-brew install ffmpeg   # установить (macOS)
-```
-
-## Performance
-
-Segment downloads are optimized for speed by default, using stream copy instead of re-encoding.
-
-**Fast Mode (Default):**
-- ⚡ 10x faster downloads
-- 📦 15-second segment: ~9 seconds (1.88 MB/s)
-- ⚠️ Cuts at keyframes (may be ±2-5 seconds off)
-
-**Precise Mode (Optional):**
-- 🎯 Frame-accurate cuts
-- 🐌 15-second segment: ~79 seconds (187 KB/s)
-- ⚙️ Requires re-encoding (CPU intensive)
+- **Client** - Main interface for all operations
+- **Options** - Configuration management
+- **Extractor** - Extracts video information from YouTube HTML/JSON
+- **VideoInfo** - Represents video metadata
+- **Downloader** - Handles video and subtitle downloads via HTTP
+- **YtdlpWrapper** - Wrapper for yt-dlp backend
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt.
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`.
 
 ## Contributing
 
@@ -700,4 +448,4 @@ The gem is available as open source under the terms of the [MIT License](https:/
 
 ## Credits
 
-Inspired by [youtube-dl](https://github.com/ytdl-org/youtube-dl) and [yt-dlp](https://github.com/yt-dlp/yt-dlp).
+Inspired by [youtube-dl](https://github.com/ytdl-org/youtube-dl) and powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp).
