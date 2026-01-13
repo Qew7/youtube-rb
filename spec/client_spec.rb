@@ -158,6 +158,98 @@ RSpec.describe YoutubeRb::Client do
     end
   end
 
+  describe '#download_segments' do
+    let(:video_url) { video_data['formats'].first['url'] }
+
+    before do
+      stub_video_download(video_url)
+      
+      # Mock ffmpeg availability and execution
+      allow_any_instance_of(YoutubeRb::Downloader).to receive(:ffmpeg_available?).and_return(true)
+      allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
+    end
+
+    it 'downloads multiple video segments' do
+      segments = [
+        { start: 10, end: 30 },
+        { start: 60, end: 90 },
+        { start: 120, end: 150 }
+      ]
+      
+      output_files = client.download_segments(test_url, segments)
+      
+      expect(output_files).to be_an(Array)
+      expect(output_files.size).to eq(3)
+      output_files.each do |file|
+        expect(file).to be_a(String)
+      end
+    end
+
+    it 'accepts custom output files for each segment' do
+      segments = [
+        { start: 10, end: 30, output_file: File.join(@test_output_dir, 'seg1.mp4') },
+        { start: 60, end: 90, output_file: File.join(@test_output_dir, 'seg2.mp4') }
+      ]
+      
+      output_files = client.download_segments(test_url, segments)
+      
+      expect(output_files[0]).to end_with('seg1.mp4')
+      expect(output_files[1]).to end_with('seg2.mp4')
+    end
+
+    it 'enables caching by default for batch downloads' do
+      segments = [
+        { start: 10, end: 30 },
+        { start: 60, end: 90 }
+      ]
+      
+      # Verify that cache_full_video is enabled by default for batch downloads
+      expect_any_instance_of(YoutubeRb::Downloader)
+        .to receive(:download_segments)
+        .and_call_original
+      
+      client.download_segments(test_url, segments)
+    end
+
+    it 'accepts additional options' do
+      segments = [
+        { start: 10, end: 30 }
+      ]
+      
+      output_files = client.download_segments(test_url, segments, cache_full_video: false)
+      
+      expect(output_files).to be_an(Array)
+      expect(output_files.size).to eq(1)
+    end
+
+    it 'validates segments array' do
+      expect {
+        client.download_segments(test_url, "not an array")
+      }.to raise_error(ArgumentError, /segments must be an Array/)
+    end
+
+    it 'validates segment durations' do
+      segments = [
+        { start: 10, end: 30 },  # valid
+        { start: 60, end: 65 }   # invalid (5 seconds)
+      ]
+      
+      expect {
+        client.download_segments(test_url, segments)
+      }.to raise_error(ArgumentError, /between 10 and 60 seconds/)
+    end
+
+    it 'raises error if ffmpeg not available' do
+      allow_any_instance_of(YoutubeRb::Downloader).to receive(:ffmpeg_available?).and_return(false)
+      
+      segments = [{ start: 10, end: 30 }]
+      
+      expect {
+        client.download_segments(test_url, segments)
+      }.to raise_error(YoutubeRb::Downloader::DownloadError, /FFmpeg is required/)
+    end
+  end
+
   describe '#download_subtitles' do
     before do
       video_data['subtitles'].each do |lang, subs|

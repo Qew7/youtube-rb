@@ -16,6 +16,7 @@ module YoutubeRb
       @video_info = nil
       @tried_ytdlp = false
       @tried_ruby = false
+      @cached_video_path = nil  # For caching full video when downloading multiple segments
     end
 
     # Download full video
@@ -33,7 +34,11 @@ module YoutubeRb
     # Download video segment (time range)
     def download_segment(start_time, end_time, output_file = nil)
       raise ArgumentError, "Start time must be less than end time" if start_time >= end_time
-      raise ArgumentError, "Segment must be between 10 and 60 seconds" unless valid_segment_duration?(start_time, end_time)
+      
+      duration = end_time - start_time
+      unless valid_segment_duration?(duration)
+        raise ArgumentError, "Segment duration must be between #{@options.min_segment_duration} and #{@options.max_segment_duration} seconds, got: #{duration}"
+      end
 
       ensure_output_directory
       
@@ -42,6 +47,37 @@ module YoutubeRb
         download_segment_with_ytdlp(start_time, end_time, output_file)
       else
         download_segment_with_ruby(start_time, end_time, output_file)
+      end
+    end
+
+    # Download multiple video segments (batch processing)
+    # @param segments [Array<Hash>] Array of segment definitions: [{start: 0, end: 30, output_file: 'seg1.mp4'}, ...]
+    # @return [Array<String>] Paths to downloaded segment files
+    def download_segments(segments)
+      raise ArgumentError, "segments must be an Array" unless segments.is_a?(Array)
+      raise ArgumentError, "segments array cannot be empty" if segments.empty?
+      
+      # Validate all segments first
+      segments.each_with_index do |seg, idx|
+        raise ArgumentError, "Segment #{idx} must be a Hash with :start and :end keys" unless seg.is_a?(Hash) && seg[:start] && seg[:end]
+        
+        start_time = seg[:start]
+        end_time = seg[:end]
+        raise ArgumentError, "Segment #{idx}: start time must be less than end time" if start_time >= end_time
+        
+        duration = end_time - start_time
+        unless valid_segment_duration?(duration)
+          raise ArgumentError, "Segment #{idx}: duration must be between #{@options.min_segment_duration} and #{@options.max_segment_duration} seconds, got: #{duration}"
+        end
+      end
+
+      ensure_output_directory
+      
+      # Use yt-dlp for batch if available (more efficient)
+      if should_use_ytdlp?
+        download_segments_with_ytdlp(segments)
+      else
+        download_segments_with_ruby(segments)
       end
     end
 
@@ -143,24 +179,82 @@ module YoutubeRb
       @video_info = @extractor.extract_info
       
       output_file ||= generate_segment_output_path(@video_info, start_time, end_time)
-      temp_file = generate_temp_path
 
       begin
-        # Download full video to temp file
-        download_video(temp_file)
+        # Get full video (from cache or download)
+        full_video_path = get_full_video_for_segmentation
         
         # Extract segment using ffmpeg
-        extract_segment(temp_file, output_file, start_time, end_time)
+        extract_segment(full_video_path, output_file, start_time, end_time)
         
         # Download subtitles for segment if requested
         if @options.write_subtitles || @options.write_auto_sub
           download_subtitles_for_segment(start_time, end_time)
         end
       ensure
-        File.delete(temp_file) if File.exist?(temp_file)
+        # Clean up cache if not enabled
+        cleanup_video_cache unless @options.cache_full_video
       end
 
       output_file
+    end
+
+    def download_segments_with_ytdlp(segments)
+      log "Using yt-dlp backend for batch segment download"
+      
+      output_files = []
+      
+      # yt-dlp doesn't have built-in batch segment support, so we download one by one
+      # But we can reuse the same wrapper and avoid re-checking availability
+      segments.each_with_index do |seg, idx|
+        log "Downloading segment #{idx + 1}/#{segments.size}: #{seg[:start]}-#{seg[:end]}s"
+        
+        begin
+          output_file = download_segment_with_ytdlp(seg[:start], seg[:end], seg[:output_file])
+          output_files << output_file
+        rescue => e
+          log "Failed to download segment #{idx}: #{e.message}"
+          raise
+        end
+      end
+      
+      output_files
+    end
+
+    def download_segments_with_ruby(segments)
+      log "Using pure Ruby backend for batch segment download"
+      
+      @video_info = @extractor.extract_info
+      output_files = []
+
+      begin
+        # Get full video once (cached if enabled)
+        full_video_path = get_full_video_for_segmentation
+        
+        # Extract all segments from the same video file
+        segments.each_with_index do |seg, idx|
+          start_time = seg[:start]
+          end_time = seg[:end]
+          output_file = seg[:output_file] || generate_segment_output_path(@video_info, start_time, end_time)
+          
+          log "Extracting segment #{idx + 1}/#{segments.size}: #{start_time}-#{end_time}s"
+          
+          # Extract segment using ffmpeg
+          extract_segment(full_video_path, output_file, start_time, end_time)
+          
+          # Download subtitles for segment if requested
+          if @options.write_subtitles || @options.write_auto_sub
+            download_subtitles_for_segment(start_time, end_time)
+          end
+          
+          output_files << output_file
+        end
+      ensure
+        # Clean up cache if not enabled
+        cleanup_video_cache unless @options.cache_full_video
+      end
+
+      output_files
     end
 
     def handle_ytdlp_error(error, fallback: nil)
@@ -532,9 +626,35 @@ module YoutubeRb
       FileUtils.mkdir_p(@options.output_path) unless Dir.exist?(@options.output_path)
     end
 
-    def valid_segment_duration?(start_time, end_time)
-      duration = end_time - start_time
-      duration >= 10 && duration <= 60
+    def valid_segment_duration?(duration)
+      duration >= @options.min_segment_duration && duration <= @options.max_segment_duration
+    end
+
+    def get_full_video_for_segmentation
+      # Return cached video if available
+      if @cached_video_path && File.exist?(@cached_video_path)
+        log "Using cached video: #{@cached_video_path}"
+        return @cached_video_path
+      end
+      
+      # Download full video
+      @cached_video_path = generate_cache_path
+      log "Downloading full video for segmentation: #{@cached_video_path}"
+      download_video(@cached_video_path)
+      
+      @cached_video_path
+    end
+
+    def cleanup_video_cache
+      if @cached_video_path && File.exist?(@cached_video_path)
+        log "Cleaning up cached video: #{@cached_video_path}"
+        File.delete(@cached_video_path)
+        @cached_video_path = nil
+      end
+    end
+
+    def generate_cache_path
+      File.join(@options.output_path, ".cache_#{Time.now.to_i}_#{rand(10000)}.mp4")
     end
 
     def ffmpeg_available?

@@ -47,6 +47,16 @@ module YoutubeRb
     client.download_segment(url, start_time, end_time, **options)
   end
 
+  # Quick batch segment download method
+  # @param url [String] Video URL
+  # @param segments [Array<Hash>] Array of segment definitions
+  # @param options [Hash] Download options
+  # @return [Array<String>] Paths to downloaded segments
+  def self.download_segments(url, segments, **options)
+    client = Client.new(**options)
+    client.download_segments(url, segments, **options)
+  end
+
   # Quick subtitles download method
   # @param url [String] Video URL
   # @param langs [Array<String>, nil] Languages to download

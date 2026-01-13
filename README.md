@@ -129,7 +129,7 @@ puts "Title: #{info.title}"
 puts "Duration: #{info.duration_formatted}"
 puts "Views: #{info.view_count}"
 
-# 3. Download segment (10-60 seconds)
+# 3. Download single segment (10-60 seconds by default)
 YoutubeRb.download_segment(
   'https://www.youtube.com/watch?v=VIDEO_ID',
   60,  # start time in seconds
@@ -137,7 +137,18 @@ YoutubeRb.download_segment(
   output_path: './segments'
 )
 
-# 4. Download only subtitles
+# 4. Download multiple segments (batch processing)
+YoutubeRb.download_segments(
+  'https://www.youtube.com/watch?v=VIDEO_ID',
+  [
+    { start: 0, end: 30 },
+    { start: 60, end: 90 },
+    { start: 120, end: 150 }
+  ],
+  output_path: './segments'
+)
+
+# 5. Download only subtitles
 YoutubeRb.download_subtitles(
   'https://www.youtube.com/watch?v=VIDEO_ID',
   langs: ['en', 'ru'],
@@ -199,7 +210,12 @@ client = YoutubeRb::Client.new(
   use_ytdlp: true,              # Force yt-dlp (recommended)
   ytdlp_fallback: true,         # Auto fallback on error (default)
   verbose: true,                # Show progress logs
+  
+  # Segment options
   segment_mode: :fast,          # :fast (default, 10x faster) or :precise (frame-accurate)
+  min_segment_duration: 10,     # Minimum segment duration in seconds (default: 10)
+  max_segment_duration: 60,     # Maximum segment duration in seconds (default: 60)
+  cache_full_video: false,      # Cache full video for multiple segments (default: false, auto-enabled for batch)
   
   # Output
   output_path: './downloads',
@@ -251,7 +267,7 @@ client.download('https://www.youtube.com/watch?v=VIDEO_ID')
 
 #### Скачивание сегментов видео (главная функция)
 
-Скачивание определенных интервалов видео (10-60 секунд):
+Скачивание определенных интервалов видео (10-60 секунд по умолчанию):
 
 ```ruby
 client = YoutubeRb::Client.new(output_path: './segments')
@@ -270,11 +286,21 @@ client.download_segment(
   output_file: './my_segment.mp4'
 )
 
-# Ограничения: сегмент должен быть от 10 до 60 секунд
+# Ограничения по умолчанию: сегмент должен быть от 10 до 60 секунд
 client.download_segment(url, 0, 10)    # ✓ Валидно (10 секунд)
 client.download_segment(url, 0, 60)    # ✓ Валидно (60 секунд)
 client.download_segment(url, 0, 5)     # ✗ Ошибка (слишком короткий)
 client.download_segment(url, 0, 120)   # ✗ Ошибка (слишком длинный)
+
+# Настройка пользовательских ограничений длительности
+client = YoutubeRb::Client.new(
+  output_path: './segments',
+  min_segment_duration: 5,    # минимум 5 секунд
+  max_segment_duration: 300   # максимум 5 минут
+)
+
+client.download_segment(url, 0, 5)     # ✓ Валидно с новыми настройками
+client.download_segment(url, 0, 300)   # ✓ Валидно (5 минут)
 ```
 
 **⚡ Performance Note**: By default, segments use **fast mode** (10x faster). 
@@ -289,6 +315,54 @@ client = YoutubeRb::Client.new(segment_mode: :precise)
 ```
 
 See [PERFORMANCE.md](PERFORMANCE.md) for detailed performance comparison and recommendations.
+
+#### Пакетная загрузка сегментов (новое!)
+
+Для загрузки нескольких сегментов из одного видео используйте `download_segments`:
+
+```ruby
+client = YoutubeRb::Client.new(output_path: './segments')
+
+url = 'https://www.youtube.com/watch?v=VIDEO_ID'
+
+segments = [
+  { start: 0, end: 30 },      # Первые 30 секунд
+  { start: 60, end: 90 },     # 1:00 - 1:30
+  { start: 120, end: 150 }    # 2:00 - 2:30
+]
+
+# Загрузит все сегменты эффективно
+output_files = client.download_segments(url, segments)
+# => ["./segments/video-segment-0-30.mp4", "./segments/video-segment-60-90.mp4", ...]
+
+puts "Downloaded #{output_files.size} segments"
+```
+
+**Преимущества пакетной загрузки:**
+
+- **Автоматическое кэширование**: Полное видео скачивается один раз, все сегменты вырезаются из него
+- **Быстрее в 10-100x**: Для Pure Ruby backend не нужно перекачивать видео для каждого сегмента
+- **Экономия трафика**: Полное видео загружается один раз вместо N раз
+
+```ruby
+# С пользовательскими именами файлов
+segments = [
+  { start: 0, end: 30, output_file: './intro.mp4' },
+  { start: 60, end: 90, output_file: './main.mp4' },
+  { start: 300, end: 330, output_file: './outro.mp4' }
+]
+
+client.download_segments(url, segments)
+
+# Явное управление кэшированием (по умолчанию включено для batch)
+client = YoutubeRb::Client.new(
+  output_path: './segments',
+  cache_full_video: false  # отключить кэш (медленнее)
+)
+
+# Или переопределить при вызове
+client.download_segments(url, segments, cache_full_video: true)
+```
 
 #### Скачивание субтитров
 
@@ -363,6 +437,12 @@ client = YoutubeRb::Client.new(
   output_template: '%(title)s-%(id)s.%(ext)s',
   format: 'best',
   quality: 'best',
+  
+  # Сегменты
+  segment_mode: :fast,          # :fast (быстро) или :precise (точно)
+  min_segment_duration: 10,     # минимальная длительность сегмента (секунды)
+  max_segment_duration: 60,     # максимальная длительность сегмента (секунды)
+  cache_full_video: false,      # кэшировать полное видео для нескольких сегментов
   
   # Субтитры
   write_subtitles: true,
@@ -460,18 +540,37 @@ require 'youtube-rb'
 client = YoutubeRb::Client.new(
   output_path: './highlights',
   write_subtitles: true,
-  subtitle_langs: ['en']
+  subtitle_langs: ['en'],
+  use_ytdlp: true,         # рекомендуется для надежности
+  cache_full_video: true   # кэширование для быстрой обработки
 )
 
 url = 'https://www.youtube.com/watch?v=VIDEO_ID'
 
+# Вариант 1: Пакетная загрузка (рекомендуется, быстрее)
 segments = [
+  { start: 0, end: 30, output_file: './highlights/intro.mp4' },
+  { start: 120, end: 150, output_file: './highlights/main.mp4' },
+  { start: 300, end: 330, output_file: './highlights/conclusion.mp4' }
+]
+
+begin
+  output_files = client.download_segments(url, segments)
+  output_files.each_with_index do |file, i|
+    puts "✓ Segment #{i+1}: #{file}"
+  end
+rescue => e
+  puts "✗ Error: #{e.message}"
+end
+
+# Вариант 2: По одному (если нужен контроль над каждым сегментом)
+segments_old_way = [
   { start: 0, end: 30, name: 'intro' },
   { start: 120, end: 150, name: 'main' },
   { start: 300, end: 330, name: 'conclusion' }
 ]
 
-segments.each do |seg|
+segments_old_way.each do |seg|
   begin
     output = client.download_segment(
       url, seg[:start], seg[:end],

@@ -23,6 +23,8 @@ module YoutubeRb
     
     # Segment cutting options
     attr_accessor :segment_mode  # :fast (default) or :precise
+    attr_accessor :min_segment_duration, :max_segment_duration  # min/max segment duration in seconds
+    attr_accessor :cache_full_video  # cache full video for multiple segment extractions
 
     def initialize(**options)
       # Backend selection
@@ -39,6 +41,21 @@ module YoutubeRb
       unless [:fast, :precise].include?(@segment_mode)
         raise ArgumentError, "segment_mode must be :fast or :precise, got: #{@segment_mode.inspect}"
       end
+      
+      # Segment duration limits (in seconds)
+      @min_segment_duration = options.fetch(:min_segment_duration, 10)
+      @max_segment_duration = options.fetch(:max_segment_duration, 60)
+      
+      # Validate segment duration limits
+      if @min_segment_duration < 1
+        raise ArgumentError, "min_segment_duration must be at least 1 second, got: #{@min_segment_duration}"
+      end
+      if @max_segment_duration < @min_segment_duration
+        raise ArgumentError, "max_segment_duration (#{@max_segment_duration}) must be >= min_segment_duration (#{@min_segment_duration})"
+      end
+      
+      # Cache full video for multiple segment extractions (Pure Ruby backend only)
+      @cache_full_video = options.fetch(:cache_full_video, false)
 
       # Video Selection
       @playlist_start = options[:playlist_start]
@@ -106,6 +123,9 @@ module YoutubeRb
         ytdlp_fallback: @ytdlp_fallback,
         verbose: @verbose,
         segment_mode: @segment_mode,
+        min_segment_duration: @min_segment_duration,
+        max_segment_duration: @max_segment_duration,
+        cache_full_video: @cache_full_video,
         format: @format,
         quality: @quality,
         output_path: @output_path,

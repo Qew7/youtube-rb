@@ -354,16 +354,42 @@ RSpec.describe YoutubeRb::Downloader do
       downloader.download_segment(10, 30)
     end
 
-    it 'validates segment duration minimum' do
+    it 'validates segment duration minimum (default 10s)' do
       expect {
         downloader.download_segment(0, 5)
       }.to raise_error(ArgumentError, /between 10 and 60 seconds/)
     end
 
-    it 'validates segment duration maximum' do
+    it 'validates segment duration maximum (default 60s)' do
       expect {
         downloader.download_segment(0, 70)
       }.to raise_error(ArgumentError, /between 10 and 60 seconds/)
+    end
+
+    it 'accepts custom min/max segment duration' do
+      custom_options = YoutubeRb::Options.new(
+        output_path: @test_output_dir,
+        min_segment_duration: 5,
+        max_segment_duration: 120
+      )
+      dl = described_class.new(test_url, custom_options)
+      
+      mock_extractor(video_data)
+      stub_video_download(video_url)
+      allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(true)
+      allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
+      
+      # Should accept 5 second segment (custom minimum)
+      expect { dl.download_segment(0, 5) }.not_to raise_error
+      
+      # Should accept 120 second segment (custom maximum)
+      expect { dl.download_segment(0, 120) }.not_to raise_error
+      
+      # Should reject 4 second segment (below custom minimum)
+      expect { dl.download_segment(0, 4) }.to raise_error(ArgumentError, /between 5 and 120 seconds/)
+      
+      # Should reject 121 second segment (above custom maximum)
+      expect { dl.download_segment(0, 121) }.to raise_error(ArgumentError, /between 5 and 120 seconds/)
     end
 
     it 'validates start time less than end time' do
@@ -433,6 +459,140 @@ RSpec.describe YoutubeRb::Downloader do
         
         subtitle_files = Dir.glob(File.join(@test_output_dir, '*segment*.srt'))
         expect(subtitle_files).not_to be_empty
+      end
+    end
+  end
+
+  describe '#download_segments' do
+    let(:video_url) { video_data['formats'].last['url'] }
+
+    before do
+      stub_video_download(video_url)
+      allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(true)
+      allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
+    end
+
+    it 'downloads multiple segments' do
+      segments = [
+        { start: 10, end: 30 },
+        { start: 60, end: 90 },
+        { start: 120, end: 150 }
+      ]
+      
+      output_files = downloader.download_segments(segments)
+      
+      expect(output_files).to be_an(Array)
+      expect(output_files.size).to eq(3)
+      output_files.each do |file|
+        expect(file).to be_a(String)
+      end
+    end
+
+    it 'accepts custom output files for segments' do
+      segments = [
+        { start: 10, end: 30, output_file: File.join(@test_output_dir, 'seg1.mp4') },
+        { start: 60, end: 90, output_file: File.join(@test_output_dir, 'seg2.mp4') }
+      ]
+      
+      output_files = downloader.download_segments(segments)
+      
+      expect(output_files[0]).to end_with('seg1.mp4')
+      expect(output_files[1]).to end_with('seg2.mp4')
+    end
+
+    it 'validates segments array' do
+      expect {
+        downloader.download_segments("not an array")
+      }.to raise_error(ArgumentError, /segments must be an Array/)
+    end
+
+    it 'validates segments array is not empty' do
+      expect {
+        downloader.download_segments([])
+      }.to raise_error(ArgumentError, /segments array cannot be empty/)
+    end
+
+    it 'validates each segment has start and end' do
+      segments = [
+        { start: 10 }  # missing end
+      ]
+      
+      expect {
+        downloader.download_segments(segments)
+      }.to raise_error(ArgumentError, /must be a Hash with :start and :end keys/)
+    end
+
+    it 'validates segment durations' do
+      segments = [
+        { start: 10, end: 30 },  # valid
+        { start: 60, end: 65 }   # invalid (5 seconds, below default minimum)
+      ]
+      
+      expect {
+        downloader.download_segments(segments)
+      }.to raise_error(ArgumentError, /Segment 1.*between 10 and 60 seconds/)
+    end
+
+    it 'validates start time less than end time' do
+      segments = [
+        { start: 30, end: 10 }  # invalid
+      ]
+      
+      expect {
+        downloader.download_segments(segments)
+      }.to raise_error(ArgumentError, /Segment 0.*start time must be less than end time/)
+    end
+
+    context 'with caching enabled' do
+      it 'downloads full video once for multiple segments' do
+        cache_options = YoutubeRb::Options.new(
+          output_path: @test_output_dir,
+          cache_full_video: true
+        )
+        dl = described_class.new(test_url, cache_options)
+        
+        mock_extractor(video_data)
+        stub_video_download(video_url)
+        allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(true)
+        allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
+        
+        segments = [
+          { start: 10, end: 30 },
+          { start: 60, end: 90 }
+        ]
+        
+        # Should download video once and cache it
+        expect(dl).to receive(:download_video).once.and_call_original
+        
+        dl.download_segments(segments)
+        
+        # Verify cache file exists after download
+        cache_files = Dir.glob(File.join(@test_output_dir, '.cache_*'))
+        expect(cache_files).not_to be_empty
+      end
+
+      it 'cleans up cache when disabled' do
+        no_cache_options = YoutubeRb::Options.new(
+          output_path: @test_output_dir,
+          cache_full_video: false
+        )
+        dl = described_class.new(test_url, no_cache_options)
+        
+        mock_extractor(video_data)
+        stub_video_download(video_url)
+        allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(true)
+        allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
+        
+        segments = [
+          { start: 10, end: 30 },
+          { start: 60, end: 90 }
+        ]
+        
+        dl.download_segments(segments)
+        
+        # Verify cache file is deleted
+        cache_files = Dir.glob(File.join(@test_output_dir, '.cache_*'))
+        expect(cache_files).to be_empty
       end
     end
   end
@@ -561,29 +721,45 @@ RSpec.describe YoutubeRb::Downloader do
     end
 
     describe '#valid_segment_duration?' do
-      it 'returns true for 10 seconds' do
+      it 'returns true for 10 seconds (default minimum)' do
         dl = downloader
-        expect(dl.send(:valid_segment_duration?, 0, 10)).to be true
+        expect(dl.send(:valid_segment_duration?, 10)).to be true
       end
 
-      it 'returns true for 60 seconds' do
+      it 'returns true for 60 seconds (default maximum)' do
         dl = downloader
-        expect(dl.send(:valid_segment_duration?, 0, 60)).to be true
+        expect(dl.send(:valid_segment_duration?, 60)).to be true
       end
 
       it 'returns true for duration in range' do
         dl = downloader
-        expect(dl.send(:valid_segment_duration?, 10, 45)).to be true
+        expect(dl.send(:valid_segment_duration?, 35)).to be true
       end
 
-      it 'returns false for less than 10 seconds' do
+      it 'returns false for less than 10 seconds (default minimum)' do
         dl = downloader
-        expect(dl.send(:valid_segment_duration?, 0, 9)).to be false
+        expect(dl.send(:valid_segment_duration?, 9)).to be false
       end
 
-      it 'returns false for more than 60 seconds' do
+      it 'returns false for more than 60 seconds (default maximum)' do
         dl = downloader
-        expect(dl.send(:valid_segment_duration?, 0, 61)).to be false
+        expect(dl.send(:valid_segment_duration?, 61)).to be false
+      end
+
+      it 'uses custom min/max duration when configured' do
+        custom_options = YoutubeRb::Options.new(
+          output_path: @test_output_dir,
+          min_segment_duration: 5,
+          max_segment_duration: 120
+        )
+        dl = described_class.new(test_url, custom_options)
+        
+        mock_extractor(video_data)
+        
+        expect(dl.send(:valid_segment_duration?, 5)).to be true   # custom minimum
+        expect(dl.send(:valid_segment_duration?, 120)).to be true # custom maximum
+        expect(dl.send(:valid_segment_duration?, 4)).to be false  # below custom minimum
+        expect(dl.send(:valid_segment_duration?, 121)).to be false # above custom maximum
       end
     end
   end

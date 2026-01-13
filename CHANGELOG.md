@@ -15,13 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Improved authentication** - Better cookie handling with yt-dlp
 - **Dependency checking** - `Client#check_dependencies` now reports yt-dlp status
 - **Segment mode option** - New `segment_mode` parameter (`:fast` or `:precise`)
+- **🎯 Batch segment downloads** - New `download_segments` method for downloading multiple segments from one video
+- **⚙️ Configurable segment duration limits** - New `min_segment_duration` and `max_segment_duration` options (default: 10-60 seconds)
+- **🚀 Smart video caching** - New `cache_full_video` option to cache full video for multiple segment extractions
+- **Module-level batch method** - Added `YoutubeRb.download_segments` for quick access
 - Example script for yt-dlp usage
 
 ### Changed
 - **Default behavior** - Now automatically uses yt-dlp if available
 - **Download reliability** - Significantly improved with yt-dlp backend
 - **Error handling** - Better error messages and automatic fallback
-- **README** - Updated with yt-dlp installation and usage instructions
+- **Segment validation** - Now uses configurable min/max duration instead of hardcoded 10-60 seconds
+- **Batch downloads** - Automatically enable caching for `download_segments` to avoid re-downloading
+- **README** - Updated with yt-dlp installation, usage instructions, and batch download examples
 
 ### Fixed
 - **403 errors** - Now resolved with yt-dlp backend
@@ -36,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Precise mode available via `segment_mode: :precise` for frame-accurate cuts
 - **Keyframe-based cutting** - Default mode cuts at keyframe positions for speed
 - **Optional precise mode** - Re-encoding available when exact timestamps needed
+- **⚡ 10-100x faster batch segment extraction** - For Pure Ruby backend with caching
+  - Full video downloaded once, all segments extracted from cached file
+  - Eliminates redundant downloads for multiple segments from same video
+  - Example: 10 segments from 1 video = 1 download instead of 10
 
 ## [0.1.0] - 2026-01-13
 

@@ -24,7 +24,7 @@ module YoutubeRb
       downloader.download
     end
 
-    # Download video segment (10-60 seconds)
+    # Download video segment
     # @param url [String] Video URL
     # @param start_time [Integer] Start time in seconds
     # @param end_time [Integer] End time in seconds
@@ -35,6 +35,28 @@ module YoutubeRb
       merged_options = @options.dup.merge(options)
       downloader = Downloader.new(url, merged_options)
       downloader.download_segment(start_time, end_time, output_file)
+    end
+
+    # Download multiple video segments (batch processing)
+    # @param url [String] Video URL
+    # @param segments [Array<Hash>] Array of segment definitions: [{start: 0, end: 30, output_file: 'seg1.mp4'}, ...]
+    #   Each segment hash should contain:
+    #   - :start (required) - Start time in seconds
+    #   - :end (required) - End time in seconds
+    #   - :output_file (optional) - Custom output file path
+    # @param options [Hash] Additional options for this download
+    # @return [Array<String>] Paths to downloaded segment files
+    # @example Download multiple segments from one video
+    #   client.download_segments(url, [
+    #     { start: 0, end: 30 },
+    #     { start: 60, end: 90 },
+    #     { start: 120, end: 150, output_file: './custom_name.mp4' }
+    #   ])
+    def download_segments(url, segments, **options)
+      # Enable caching by default for batch downloads (can be overridden)
+      merged_options = @options.dup.merge({ cache_full_video: true }.merge(options))
+      downloader = Downloader.new(url, merged_options)
+      downloader.download_segments(segments)
     end
 
     # Download only subtitles
