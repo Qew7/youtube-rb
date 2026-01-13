@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-01-13
+
 ### Added
 - **yt-dlp backend support** - Added `YtdlpWrapper` for reliable video downloads
 - **Automatic fallback** - Falls back from pure Ruby to yt-dlp on errors (403, etc) for full video downloads
