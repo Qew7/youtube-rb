@@ -7,13 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-01-13
+
+### Changed
+- **🚨 BREAKING: Removed Pure Ruby backend** - Now exclusively uses yt-dlp for all operations
+- **🚨 BREAKING: Removed `use_ytdlp` option** - yt-dlp is always used (no longer optional)
+- **🚨 BREAKING: Removed `ytdlp_fallback` option** - No fallback needed as there's only one backend
+- **Simplified architecture** - Removed `Extractor` class and all Pure Ruby HTTP download code
+- **yt-dlp is now required** - Must be installed for the library to work
+
+### Removed
+- Pure Ruby video information extraction
+- Pure Ruby HTTP video download
+- Automatic fallback mechanism between backends
+- `use_ytdlp` configuration option
+- `ytdlp_fallback` configuration option
+
 ## [0.2.0] - 2026-01-13
 
 ### Added
 - **yt-dlp backend support** - Added `YtdlpWrapper` for reliable video downloads
-- **Automatic fallback** - Falls back from pure Ruby to yt-dlp on errors (403, etc) for full video downloads
-- **Backend selection options** - `use_ytdlp`, `ytdlp_fallback` configuration
-- **Verbose logging** - Added `verbose` option to see which backend is used
+- **Automatic fallback** - Falls back from pure Ruby to yt-dlp on errors (403, etc) for full video downloads (removed in 0.3.0)
+- **Backend selection options** - `use_ytdlp`, `ytdlp_fallback` configuration (removed in 0.3.0)
+- **Verbose logging** - Added `verbose` option to see download progress
 - **Improved authentication** - Better cookie handling with yt-dlp
 - **Dependency checking** - `Client#check_dependencies` now reports yt-dlp status
 - **Segment mode option** - New `segment_mode` parameter (`:fast` or `:precise`)

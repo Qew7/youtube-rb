@@ -59,8 +59,6 @@ RSpec.describe YoutubeRb do
         expect(options.format).to eq('best')
         expect(options.quality).to eq('best')
         expect(options.output_path).to eq('./downloads')
-        expect(options.use_ytdlp).to eq(false)
-        expect(options.ytdlp_fallback).to eq(true)
         expect(options.verbose).to eq(false)
       end
 
@@ -69,26 +67,22 @@ RSpec.describe YoutubeRb do
           format: '1080p',
           output_path: '/tmp',
           write_subtitles: true,
-          use_ytdlp: true,
           verbose: true
         )
         expect(options.format).to eq('1080p')
         expect(options.output_path).to eq('/tmp')
         expect(options.write_subtitles).to eq(true)
-        expect(options.use_ytdlp).to eq(true)
         expect(options.verbose).to eq(true)
       end
     end
 
     describe "#to_h" do
       it "returns hash representation" do
-        options = YoutubeRb::Options.new(format: 'best', use_ytdlp: true)
+        options = YoutubeRb::Options.new(format: 'best', verbose: true)
         hash = options.to_h
         expect(hash).to be_a(Hash)
         expect(hash[:format]).to eq('best')
-        expect(hash[:use_ytdlp]).to eq(true)
-        expect(hash).to have_key(:ytdlp_fallback)
-        expect(hash).to have_key(:verbose)
+        expect(hash[:verbose]).to eq(true)
       end
     end
 
@@ -165,16 +159,6 @@ RSpec.describe YoutubeRb do
         expect(hash).to be_a(Hash)
         expect(hash[:id]).to eq('test123')
         expect(hash[:title]).to eq('Test Video')
-      end
-    end
-  end
-
-  describe YoutubeRb::Extractor do
-    let(:extractor) { YoutubeRb::Extractor.new('https://www.youtube.com/watch?v=test') }
-
-    describe "#initialize" do
-      it "creates extractor with URL" do
-        expect(extractor.url).to eq('https://www.youtube.com/watch?v=test')
       end
     end
   end

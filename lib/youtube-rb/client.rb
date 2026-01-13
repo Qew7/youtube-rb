@@ -10,8 +10,11 @@ module YoutubeRb
     # @param url [String] Video URL
     # @return [VideoInfo] Video information object
     def info(url)
-      extractor = Extractor.new(url, @options.to_h)
-      extractor.extract_info
+      ytdlp = YtdlpWrapper.new(@options)
+      info_data = ytdlp.extract_info(url)
+      VideoInfo.new(info_data)
+    rescue YtdlpWrapper::YtdlpError => e
+      raise StandardError, "Failed to extract video info: #{e.message}"
     end
 
     # Download full video

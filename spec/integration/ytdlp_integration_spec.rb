@@ -50,17 +50,7 @@ RSpec.describe "YoutubeRb + yt-dlp Integration", :integration do
     end
   end
 
-  describe "backend selection" do
-    it "creates client with yt-dlp backend enabled" do
-      client = YoutubeRb::Client.new(use_ytdlp: true, verbose: false)
-      expect(client.options.use_ytdlp).to be true
-    end
-
-    it "creates client with fallback mode" do
-      client = YoutubeRb::Client.new(ytdlp_fallback: true, verbose: false)
-      expect(client.options.ytdlp_fallback).to be true
-    end
-
+  describe "client configuration" do
     it "creates client with verbose mode" do
       client = YoutubeRb::Client.new(verbose: true)
       expect(client.options.verbose).to be true
@@ -94,7 +84,6 @@ RSpec.describe "YoutubeRb + yt-dlp Integration", :integration do
     it "downloads video segment using yt-dlp backend" do
       client = YoutubeRb::Client.new(
         output_path: output_dir,
-        use_ytdlp: true,
         verbose: false
       )
 

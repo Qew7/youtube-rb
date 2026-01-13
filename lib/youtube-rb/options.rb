@@ -18,8 +18,8 @@ module YoutubeRb
     attr_accessor :match_title, :reject_title, :date, :datebefore, :dateafter,
                   :min_views, :max_views, :no_playlist, :yes_playlist
 
-    # Backend selection
-    attr_accessor :use_ytdlp, :ytdlp_fallback, :verbose
+    # Logging
+    attr_accessor :verbose
     
     # Segment cutting options
     attr_accessor :segment_mode  # :fast (default) or :precise
@@ -27,9 +27,7 @@ module YoutubeRb
     attr_accessor :cache_full_video  # cache full video for multiple segment extractions
 
     def initialize(**options)
-      # Backend selection
-      @use_ytdlp = options.fetch(:use_ytdlp, false)
-      @ytdlp_fallback = options.fetch(:ytdlp_fallback, true)
+      # Logging
       @verbose = options.fetch(:verbose, false)
       
       # Segment cutting options
@@ -119,8 +117,6 @@ module YoutubeRb
 
     def to_h
       {
-        use_ytdlp: @use_ytdlp,
-        ytdlp_fallback: @ytdlp_fallback,
         verbose: @verbose,
         segment_mode: @segment_mode,
         min_segment_duration: @min_segment_duration,

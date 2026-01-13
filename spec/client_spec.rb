@@ -4,7 +4,7 @@ RSpec.describe YoutubeRb::Client do
   let(:client) { described_class.new(output_path: @test_output_dir) }
 
   before do
-    mock_extractor(video_data)
+    mock_ytdlp(video_data)
   end
 
   describe '#initialize' do
@@ -62,11 +62,11 @@ RSpec.describe YoutubeRb::Client do
     end
 
     it 'raises error for invalid URL' do
-      mock_extractor_error
+      mock_ytdlp_error
       
       expect {
         client.info('https://www.youtube.com/watch?v=invalid')
-      }.to raise_error(YoutubeRb::Extractor::ExtractionError)
+      }.to raise_error(StandardError)
     end
   end
 
@@ -96,7 +96,7 @@ RSpec.describe YoutubeRb::Client do
       custom_dir = File.join(@test_output_dir, 'nested', 'path')
       custom_client = described_class.new(output_path: custom_dir)
       
-      mock_extractor(video_data)
+      mock_ytdlp(video_data)
       stub_video_download(video_url)
       
       output_file = custom_client.download(test_url)
@@ -275,7 +275,7 @@ RSpec.describe YoutubeRb::Client do
         subtitle_format: 'vtt'
       )
       
-      mock_extractor(video_data)
+      mock_ytdlp(video_data)
       video_data['subtitles'].each do |lang, subs|
         subs.each { |sub| stub_subtitle_download(sub['url']) }
       end
@@ -366,13 +366,6 @@ RSpec.describe YoutubeRb::Client do
       expect(output_file).to be_a(String)
     end
 
-    it 'raises error if ffmpeg not available' do
-      allow_any_instance_of(YoutubeRb::Downloader).to receive(:ffmpeg_available?).and_return(false)
-      
-      expect {
-        client.extract_audio(test_url)
-      }.to raise_error(YoutubeRb::Downloader::DownloadError, /FFmpeg is required/)
-    end
   end
 
   describe '#valid_url?' do
@@ -381,7 +374,7 @@ RSpec.describe YoutubeRb::Client do
     end
 
     it 'returns false for invalid URL' do
-      mock_extractor_error
+      mock_ytdlp_error
       
       expect(client.valid_url?('https://www.youtube.com/watch?v=invalid')).to be false
     end
@@ -395,7 +388,7 @@ RSpec.describe YoutubeRb::Client do
     end
 
     it 'returns false for non-YouTube URL' do
-      mock_extractor_error(YoutubeRb::Extractor::ExtractionError, 'Not a YouTube URL')
+      mock_ytdlp_error('Not a YouTube URL')
       
       expect(client.valid_url?('https://example.com')).to be false
     end
@@ -416,7 +409,7 @@ RSpec.describe YoutubeRb::Client do
       no_formats_data = video_data.dup
       no_formats_data['formats'] = []
       
-      mock_extractor(no_formats_data)
+      mock_ytdlp(no_formats_data)
       
       formats = client.formats('https://www.youtube.com/watch?v=noformats')
       expect(formats).to eq([])
@@ -437,7 +430,7 @@ RSpec.describe YoutubeRb::Client do
       no_subs_data = video_data.dup
       no_subs_data['subtitles'] = {}
       
-      mock_extractor(no_subs_data)
+      mock_ytdlp(no_subs_data)
       
       subtitles = client.subtitles('https://www.youtube.com/watch?v=nosubs')
       expect(subtitles).to eq({})

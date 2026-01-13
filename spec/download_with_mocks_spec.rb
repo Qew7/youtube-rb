@@ -13,10 +13,9 @@ RSpec.describe "Download with mocks" do
   before(:each) do
     FileUtils.mkdir_p(output_dir)
     
-    # Mock the Extractor to return real data
-    allow_any_instance_of(YoutubeRb::Extractor).to receive(:extract_info) do
-      YoutubeRb::VideoInfo.new(rickroll_info)
-    end
+    # Mock YtdlpWrapper to return real data
+    allow(YoutubeRb::YtdlpWrapper).to receive(:available?).and_return(true)
+    allow_any_instance_of(YoutubeRb::YtdlpWrapper).to receive(:extract_info).and_return(rickroll_info)
   end
 
   after(:each) do
@@ -70,8 +69,7 @@ RSpec.describe "Download with mocks" do
       end
       
       client = YoutubeRb::Client.new(
-        output_path: output_dir,
-        use_ytdlp: true
+        output_path: output_dir
       )
 
       output_file = client.download(rickroll_url)
@@ -101,8 +99,7 @@ RSpec.describe "Download with mocks" do
       end
       
       client = YoutubeRb::Client.new(
-        output_path: output_dir,
-        use_ytdlp: true
+        output_path: output_dir
       )
 
       output_file = client.download_segment(rickroll_url, start_time, end_time)
@@ -146,7 +143,7 @@ RSpec.describe "Download with mocks" do
       # It's better tested in real_download_spec.rb with actual downloads
     end
 
-    it "respects use_ytdlp: true option" do
+    it "always uses yt-dlp for downloads" do
       tried_ytdlp = false
       
       allow_any_instance_of(YoutubeRb::YtdlpWrapper).to receive(:download) do
@@ -157,8 +154,7 @@ RSpec.describe "Download with mocks" do
       end
       
       client = YoutubeRb::Client.new(
-        output_path: output_dir,
-        use_ytdlp: true
+        output_path: output_dir
       )
 
       client.download(rickroll_url)
@@ -173,14 +169,8 @@ RSpec.describe "Download with mocks" do
         raise YoutubeRb::YtdlpWrapper::YtdlpError, "Video unavailable"
       end
       
-      allow_any_instance_of(YoutubeRb::Extractor).to receive(:extract_info) do
-        raise YoutubeRb::Extractor::ExtractionError, "Failed to extract"
-      end
-      
       client = YoutubeRb::Client.new(
-        output_path: output_dir,
-        use_ytdlp: true,
-        ytdlp_fallback: false
+        output_path: output_dir
       )
 
       expect {

@@ -1,14 +1,12 @@
 require_relative "youtube-rb/version"
 require_relative "youtube-rb/options"
 require_relative "youtube-rb/video_info"
-require_relative "youtube-rb/extractor"
 require_relative "youtube-rb/ytdlp_wrapper"
 require_relative "youtube-rb/downloader"
 require_relative "youtube-rb/client"
 
 module YoutubeRb
   class Error < StandardError; end
-  class ExtractionError < Error; end
   class DownloadError < Error; end
   class ValidationError < Error; end
 

@@ -63,7 +63,6 @@ RSpec.describe "Real video downloads", :real_download do
       
       client = YoutubeRb::Client.new(
         output_path: output_dir,
-        use_ytdlp: true,
         verbose: true
       )
 
@@ -112,7 +111,6 @@ RSpec.describe "Real video downloads", :real_download do
       
       client = YoutubeRb::Client.new(
         output_path: output_dir,
-        use_ytdlp: true,
         verbose: true
       )
 
@@ -128,39 +126,12 @@ RSpec.describe "Real video downloads", :real_download do
     end
   end
 
-  describe "fallback mechanism" do
-    let(:test_url) { 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }
-
-    it "falls back to yt-dlp when pure Ruby fails", :very_slow do
-      puts "\n  → Testing automatic fallback to yt-dlp"
-      puts "  → This may download ~240MB of video data..."
-      
-      client = YoutubeRb::Client.new(
-        output_path: output_dir,
-        use_ytdlp: false,      # Start with pure Ruby
-        ytdlp_fallback: true,  # Enable fallback
-        verbose: true
-      )
-
-      # This should try pure Ruby first, then fall back to yt-dlp
-      output_file = client.download(test_url)
-      
-      expect(output_file).to be_a(String)
-      expect(File.exist?(output_file)).to be true
-      expect(File.size(output_file)).to be > 10_000_000  # At least 10MB
-      
-      puts "  ✓ Fallback worked, file downloaded"
-      puts "  ✓ File size: #{(File.size(output_file) / 1024.0 / 1024.0).round(2)} MB"
-    end
-  end
-
   describe "error handling" do
     it "raises error for invalid video ID" do
       puts "\n  → Testing error handling for invalid video"
       
       client = YoutubeRb::Client.new(
-        output_path: output_dir,
-        use_ytdlp: true
+        output_path: output_dir
       )
 
       invalid_url = 'https://www.youtube.com/watch?v=invalidvideoid'

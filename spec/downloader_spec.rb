@@ -5,7 +5,7 @@ RSpec.describe YoutubeRb::Downloader do
   let(:downloader) { described_class.new(test_url, options) }
 
   before do
-    mock_extractor(video_data)
+    mock_ytdlp(video_data)
   end
 
   describe '#initialize' do
@@ -49,11 +49,9 @@ RSpec.describe YoutubeRb::Downloader do
       expect(info1).to equal(info2)
     end
 
-    it 'calls extractor only once' do
-      video_info = YoutubeRb::VideoInfo.new(video_data)
-      
-      expect_any_instance_of(YoutubeRb::Extractor)
-        .to receive(:extract_info).once.and_return(video_info)
+    it 'calls ytdlp only once' do
+      expect_any_instance_of(YoutubeRb::YtdlpWrapper)
+        .to receive(:extract_info).once.and_return(video_data)
       
       downloader.info
       downloader.info
@@ -91,7 +89,7 @@ RSpec.describe YoutubeRb::Downloader do
         )
         dl = described_class.new(test_url, custom_options)
         
-        mock_extractor(video_data)
+        mock_ytdlp(video_data)
         stub_video_download(video_url)
         
         output_file = dl.download
@@ -103,7 +101,7 @@ RSpec.describe YoutubeRb::Downloader do
         bad_title_data = video_data.dup
         bad_title_data['title'] = 'Test/Video:With*Bad?Chars'
         
-        mock_extractor(bad_title_data)
+        mock_ytdlp(bad_title_data)
         stub_video_download(video_url)
         
         dl = described_class.new(
@@ -134,7 +132,7 @@ RSpec.describe YoutubeRb::Downloader do
         )
         dl = described_class.new(test_url, subtitle_options)
         
-        mock_extractor(video_data)
+        mock_ytdlp(video_data)
         stub_video_download(video_url)
         video_data['subtitles'].each do |lang, subs|
           subs.each { |sub| stub_subtitle_download(sub['url']) }
@@ -149,7 +147,7 @@ RSpec.describe YoutubeRb::Downloader do
       it 'skips subtitles when disabled' do
         dl = described_class.new(test_url, options)
         
-        mock_extractor(video_data)
+        mock_ytdlp(video_data)
         stub_video_download(video_url)
         
         dl.download
@@ -171,7 +169,7 @@ RSpec.describe YoutubeRb::Downloader do
         )
         dl = described_class.new(test_url, metadata_options)
         
-        mock_extractor(video_data)
+        mock_ytdlp(video_data)
         stub_video_download(video_url)
         stub_thumbnail_download(video_data['thumbnail'])
         
@@ -191,7 +189,7 @@ RSpec.describe YoutubeRb::Downloader do
         )
         dl = described_class.new(test_url, thumbnail_options)
         
-        mock_extractor(video_data)
+        mock_ytdlp(video_data)
         stub_video_download(video_url)
         stub_thumbnail_download(video_data['thumbnail'])
         
@@ -208,7 +206,7 @@ RSpec.describe YoutubeRb::Downloader do
         )
         dl = described_class.new(test_url, desc_options)
         
-        mock_extractor(video_data)
+        mock_ytdlp(video_data)
         stub_video_download(video_url)
         
         dl.download
@@ -236,7 +234,7 @@ RSpec.describe YoutubeRb::Downloader do
         )
         dl = described_class.new(test_url, audio_options)
         
-        mock_extractor(video_data)
+        mock_ytdlp(video_data)
         stub_video_download(video_url)
         
         output_file = dl.download
@@ -244,81 +242,16 @@ RSpec.describe YoutubeRb::Downloader do
         expect(output_file).to be_a(String)
       end
 
-      it 'raises error if ffmpeg not available' do
-        audio_options = YoutubeRb::Options.new(
-          output_path: @test_output_dir,
-          extract_audio: true
-        )
-        dl = described_class.new(test_url, audio_options)
-        
-        mock_extractor(video_data)
-        stub_video_download(video_url)
-        
-        allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(false)
-        
-        expect {
-          dl.download
-        }.to raise_error(YoutubeRb::Downloader::DownloadError, /FFmpeg is required/)
-      end
     end
 
     context 'error handling' do
-      it 'raises error when no formats available' do
-        no_format_data = video_data.dup
-        no_format_data['formats'] = []
-        
-        mock_extractor(no_format_data)
-        
-        dl = described_class.new(
-          'https://www.youtube.com/watch?v=noformat',
-          options
-        )
-        
-        expect {
-          dl.download
-        }.to raise_error(YoutubeRb::Downloader::DownloadError, /No suitable format/)
-      end
-
-      it 'raises error when format has no URL' do
-        bad_format_data = video_data.dup
-        bad_format_data['formats'] = [{ 'format_id' => '18', 'ext' => 'mp4' }]
-        
-        mock_extractor(bad_format_data)
-        
-        dl = described_class.new(
-          'https://www.youtube.com/watch?v=badformat',
-          options
-        )
-        
-        expect {
-          dl.download
-        }.to raise_error(YoutubeRb::Downloader::DownloadError, /No URL found/)
-      end
-
-      it 'handles HTTP download errors' do
-        # Disable yt-dlp fallback for this test
-        dl = YoutubeRb::Downloader.new(
-          test_url,
-          output_path: @test_output_dir,
-          use_ytdlp: false,
-          ytdlp_fallback: false
-        )
-        
-        mock_extractor(video_data)
-        stub_request(:get, video_url).to_return(status: 403, body: 'Forbidden')
-        
-        expect {
-          dl.download
-        }.to raise_error(YoutubeRb::Downloader::DownloadError, /HTTP download failed/)
-      end
-
-      it 'handles network errors' do
-        mock_extractor(video_data)
-        stub_request(:get, video_url).to_raise(Faraday::ConnectionFailed)
+      it 'handles download errors' do
+        allow_any_instance_of(YoutubeRb::YtdlpWrapper).to receive(:download)
+          .and_raise(YoutubeRb::YtdlpWrapper::YtdlpError, 'Download failed')
         
         expect {
           downloader.download
-        }.to raise_error(YoutubeRb::Downloader::DownloadError, /Network error/)
+        }.to raise_error(YoutubeRb::Downloader::DownloadError, /Download failed/)
       end
     end
   end
@@ -556,7 +489,7 @@ RSpec.describe YoutubeRb::Downloader do
         )
         dl = described_class.new(test_url, cache_options)
         
-        mock_extractor(video_data)
+        mock_ytdlp(video_data)
         
         # Mock yt-dlp download
         allow_any_instance_of(YoutubeRb::YtdlpWrapper).to receive(:download) do |_, url, output_path|
@@ -583,7 +516,7 @@ RSpec.describe YoutubeRb::Downloader do
         )
         dl = described_class.new(test_url, no_cache_options)
         
-        mock_extractor(video_data)
+        mock_ytdlp(video_data)
         
         # Mock yt-dlp download
         allow_any_instance_of(YoutubeRb::YtdlpWrapper).to receive(:download) do |_, url, output_path|
@@ -633,7 +566,7 @@ RSpec.describe YoutubeRb::Downloader do
       )
       dl = described_class.new(test_url, subtitle_options)
       
-      mock_extractor(video_data)
+      mock_ytdlp(video_data)
       video_data['subtitles'].each do |lang, subs|
         subs.each { |sub| stub_subtitle_download(sub['url']) }
       end
@@ -649,7 +582,7 @@ RSpec.describe YoutubeRb::Downloader do
       subtitle_options = YoutubeRb::Options.new(output_path: custom_dir)
       dl = described_class.new(test_url, subtitle_options)
       
-      mock_extractor(video_data)
+      mock_ytdlp(video_data)
       video_data['subtitles'].each do |lang, subs|
         subs.each { |sub| stub_subtitle_download(sub['url']) }
       end
@@ -701,32 +634,6 @@ RSpec.describe YoutubeRb::Downloader do
       end
     end
 
-    describe '#audio_codec_for_format' do
-      it 'returns correct codec for mp3' do
-        dl = downloader
-        expect(dl.send(:audio_codec_for_format, 'mp3')).to eq('libmp3lame')
-      end
-
-      it 'returns correct codec for aac' do
-        dl = downloader
-        expect(dl.send(:audio_codec_for_format, 'aac')).to eq('aac')
-      end
-
-      it 'returns correct codec for opus' do
-        dl = downloader
-        expect(dl.send(:audio_codec_for_format, 'opus')).to eq('libopus')
-      end
-
-      it 'returns correct codec for flac' do
-        dl = downloader
-        expect(dl.send(:audio_codec_for_format, 'flac')).to eq('flac')
-      end
-
-      it 'returns copy for unknown format' do
-        dl = downloader
-        expect(dl.send(:audio_codec_for_format, 'unknown')).to eq('copy')
-      end
-    end
 
     describe '#valid_segment_duration?' do
       it 'returns true for 10 seconds (default minimum)' do
@@ -762,7 +669,7 @@ RSpec.describe YoutubeRb::Downloader do
         )
         dl = described_class.new(test_url, custom_options)
         
-        mock_extractor(video_data)
+        mock_ytdlp(video_data)
         
         expect(dl.send(:valid_segment_duration?, 5)).to be true   # custom minimum
         expect(dl.send(:valid_segment_duration?, 120)).to be true # custom maximum

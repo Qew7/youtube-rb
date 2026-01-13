@@ -38,9 +38,9 @@ Or install it yourself as:
 
 ### External Tools
 
-#### yt-dlp (Required for segment downloads)
+#### yt-dlp (Required)
 
-Install yt-dlp for reliable downloads and to avoid 403 errors:
+YoutubeRb uses yt-dlp as its backend for downloading videos. Install yt-dlp:
 
 ```bash
 # Using pip (recommended)
@@ -56,7 +56,7 @@ brew install yt-dlp
 # https://github.com/yt-dlp/yt-dlp/releases
 ```
 
-**Note**: yt-dlp is **required** for segment downloads (`download_segment` and `download_segments` methods). Full video downloads support Pure Ruby fallback with automatic retry using yt-dlp.
+**Note**: yt-dlp is **required** for all download operations.
 
 #### FFmpeg (Optional)
 
@@ -132,7 +132,6 @@ client = YoutubeRb::Client.new
 # Client with options
 client = YoutubeRb::Client.new(
   output_path: './downloads',
-  use_ytdlp: true,
   verbose: true,
   write_subtitles: true,
   subtitle_langs: ['en']
@@ -146,14 +145,6 @@ client = YoutubeRb::Client.new(
 ```ruby
 # Simple download
 client.download('https://www.youtube.com/watch?v=VIDEO_ID')
-
-# With automatic fallback (default behavior)
-client = YoutubeRb::Client.new(ytdlp_fallback: true)
-client.download(url)  # Tries Pure Ruby first, falls back to yt-dlp on 403
-
-# Force yt-dlp backend (recommended for reliability)
-client = YoutubeRb::Client.new(use_ytdlp: true)
-client.download(url)
 ```
 
 #### Single Segment Download
@@ -304,7 +295,6 @@ For age-restricted, private, or member-only videos, or to bypass 403 errors:
 ```ruby
 client = YoutubeRb::Client.new(
   cookies_file: './youtube_cookies.txt',
-  use_ytdlp: true,
   verbose: true
 )
 client.download('https://www.youtube.com/watch?v=VIDEO_ID')
@@ -313,15 +303,12 @@ client.download('https://www.youtube.com/watch?v=VIDEO_ID')
 **Important Notes:**
 - 🔒 **Keep your cookies file secure** - it contains your session data
 - 🔄 **Cookies expire** - re-export if you get 403 errors again
-- 💡 **Use yt-dlp backend** for best cookie handling
 
 ## Configuration Options
 
 ```ruby
 client = YoutubeRb::Client.new(
-  # Backend
-  use_ytdlp: true,              # Force yt-dlp (recommended)
-  ytdlp_fallback: true,         # Auto fallback on error (default)
+  # Logging
   verbose: true,                # Show progress logs
   
   # Output
@@ -369,30 +356,16 @@ client = YoutubeRb::Client.new(
 
 ### 403 Errors or Bot Detection
 
-**Option 1: Use yt-dlp backend (easiest)**
-```ruby
-client = YoutubeRb::Client.new(use_ytdlp: true, verbose: true)
-client.download(url)
-```
-
-**Option 2: Export cookies from browser**
+**Export cookies from browser:**
 ```ruby
 client = YoutubeRb::Client.new(
-  cookies_file: './youtube_cookies.txt',
-  use_ytdlp: true
+  cookies_file: './youtube_cookies.txt'
 )
 client.download(url)
 ```
 
-**Option 3: Enable fallback mode** (default)
-```ruby
-client = YoutubeRb::Client.new(ytdlp_fallback: true)
-# Tries Pure Ruby first, falls back to yt-dlp on 403
-```
-
 ### No Formats Found / Video Unavailable
 
-- Use yt-dlp backend: `YoutubeRb::Client.new(use_ytdlp: true)`
 - Export cookies from authenticated browser session
 - Check if video is available in your region
 - Verify the video is public and not deleted
@@ -427,10 +400,9 @@ end
 
 - **Client** - Main interface for all operations
 - **Options** - Configuration management
-- **Extractor** - Extracts video information from YouTube HTML/JSON
 - **VideoInfo** - Represents video metadata
-- **Downloader** - Handles video and subtitle downloads via HTTP
-- **YtdlpWrapper** - Wrapper for yt-dlp backend
+- **Downloader** - Handles video downloads
+- **YtdlpWrapper** - Wrapper for yt-dlp backend (primary download engine)
 
 ## Development
 
