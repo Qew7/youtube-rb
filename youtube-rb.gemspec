@@ -31,7 +31,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "base64", "~> 0.2"
 
   # Development dependencies
-  spec.add_development_dependency "bundler", ">= 2.7"
+  spec.add_development_dependency "bundler", ">= 2.0"
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.13"
   spec.add_development_dependency "webmock", "~> 3.26"
