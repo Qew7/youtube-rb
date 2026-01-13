@@ -1,14 +1,16 @@
+require_relative "lib/youtube-rb/version"
+
 Gem::Specification.new do |spec|
   spec.name          = "youtube-rb"
-  spec.version       = "0.1.0"
+  spec.version       = YoutubeRb::VERSION
   spec.authors       = ["Maxim Veysgeym"]
   spec.email         = ["qew7777@gmail.com"]
 
-  spec.summary       = "A Ruby gem for working with YouTube"
-  spec.description   = "A Ruby library for interacting with YouTube API and functionality"
+  spec.summary       = "A Ruby library for downloading and extracting YouTube videos and subtitles"
+  spec.description   = "A Ruby library inspired by youtube-dl for downloading videos, extracting video segments, and fetching subtitles from YouTube and other video platforms"
   spec.homepage      = "https://github.com/Qew7/youtube-rb"
   spec.license       = "MIT"
-  spec.required_ruby_version = ">= 2.6.0"
+  spec.required_ruby_version = ">= 2.7.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/Qew7/youtube-rb"
@@ -20,11 +22,17 @@ Gem::Specification.new do |spec|
   spec.executables   = spec.files.grep(%r{\Abin/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  # Dependencies
-  # spec.add_dependency "example-gem", "~> 1.0"
+  # Runtime dependencies
+  spec.add_dependency "faraday", "~> 2.7"
+  spec.add_dependency "faraday-retry", "~> 2.2"
+  spec.add_dependency "nokogiri", "~> 1.16"
+  spec.add_dependency "streamio-ffmpeg", "~> 3.0"
+  spec.add_dependency "addressable", "~> 2.8"
 
   # Development dependencies
   spec.add_development_dependency "bundler", "~> 2.0"
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.0"
+  spec.add_development_dependency "webmock", "~> 3.19"
+  spec.add_development_dependency "vcr", "~> 6.2"
 end
