@@ -203,8 +203,18 @@ module YoutubeRb
       section = "*#{start_time}-#{end_time}"
       args.insert(-2, '--download-sections', section)
       
-      # Use ffmpeg for precise cutting
-      args.insert(-2, '--force-keyframes-at-cuts')
+      # Segment cutting mode:
+      # :fast (default) - Stream copy mode, cuts at keyframes (10x faster, ±2-5s accuracy)
+      # :precise - Re-encoding mode, exact timestamps (slow, frame-perfect)
+      #
+      # Fast mode: Uses stream copy (ffmpeg -c copy) which is very fast but cuts only at
+      #           keyframe positions. This means segments may be a few seconds longer.
+      # Precise mode: Uses --force-keyframes-at-cuts which forces re-encoding to get
+      #              frame-accurate cuts. This is VERY slow (especially for 4K video).
+      if @options.segment_mode == :precise
+        args.insert(-2, '--force-keyframes-at-cuts')
+      end
+      # For :fast mode, we don't add any flags - yt-dlp uses stream copy by default
       
       args
     end

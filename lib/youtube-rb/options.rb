@@ -20,12 +20,25 @@ module YoutubeRb
 
     # Backend selection
     attr_accessor :use_ytdlp, :ytdlp_fallback, :verbose
+    
+    # Segment cutting options
+    attr_accessor :segment_mode  # :fast (default) or :precise
 
     def initialize(**options)
       # Backend selection
       @use_ytdlp = options.fetch(:use_ytdlp, false)
       @ytdlp_fallback = options.fetch(:ytdlp_fallback, true)
       @verbose = options.fetch(:verbose, false)
+      
+      # Segment cutting options
+      # :fast (default) - Fast stream copy mode, cuts at keyframes (10x faster, ±2-5s accuracy)
+      # :precise - Precise mode with re-encoding, exact timestamps (slow, frame-perfect)
+      @segment_mode = options.fetch(:segment_mode, :fast)
+      
+      # Validate segment_mode
+      unless [:fast, :precise].include?(@segment_mode)
+        raise ArgumentError, "segment_mode must be :fast or :precise, got: #{@segment_mode.inspect}"
+      end
 
       # Video Selection
       @playlist_start = options[:playlist_start]
@@ -92,6 +105,7 @@ module YoutubeRb
         use_ytdlp: @use_ytdlp,
         ytdlp_fallback: @ytdlp_fallback,
         verbose: @verbose,
+        segment_mode: @segment_mode,
         format: @format,
         quality: @quality,
         output_path: @output_path,

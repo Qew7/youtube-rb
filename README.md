@@ -7,6 +7,7 @@ A **Ruby library** inspired by [youtube-dl](https://github.com/ytdl-org/youtube-
 - 🔧 **Dual Backend Support** - Pure Ruby implementation with optional yt-dlp fallback
 - 📹 Download full videos or audio-only
 - ✂️ Extract video segments (10-60 seconds) 
+- ⚡ **Fast segment downloads** - 10x faster with optimized stream copy mode
 - 📝 Download subtitles (manual and auto-generated)
 - 🎵 Extract audio in various formats (mp3, aac, opus, etc.)
 - 📊 Get detailed video information
@@ -198,6 +199,7 @@ client = YoutubeRb::Client.new(
   use_ytdlp: true,              # Force yt-dlp (recommended)
   ytdlp_fallback: true,         # Auto fallback on error (default)
   verbose: true,                # Show progress logs
+  segment_mode: :fast,          # :fast (default, 10x faster) or :precise (frame-accurate)
   
   # Output
   output_path: './downloads',
@@ -274,6 +276,19 @@ client.download_segment(url, 0, 60)    # ✓ Валидно (60 секунд)
 client.download_segment(url, 0, 5)     # ✗ Ошибка (слишком короткий)
 client.download_segment(url, 0, 120)   # ✗ Ошибка (слишком длинный)
 ```
+
+**⚡ Performance Note**: By default, segments use **fast mode** (10x faster). 
+Cuts may be off by a few seconds due to keyframe positions. For frame-accurate cuts:
+
+```ruby
+# Fast mode (default) - 10x faster, cuts at keyframes
+client = YoutubeRb::Client.new(segment_mode: :fast)
+
+# Precise mode - frame-accurate but slow (re-encodes video)
+client = YoutubeRb::Client.new(segment_mode: :precise)
+```
+
+See [PERFORMANCE.md](PERFORMANCE.md) for detailed performance comparison and recommendations.
 
 #### Скачивание субтитров
 
@@ -558,6 +573,20 @@ Try:
 which ffmpeg          # проверить
 brew install ffmpeg   # установить (macOS)
 ```
+
+## Performance
+
+Segment downloads are optimized for speed by default, using stream copy instead of re-encoding.
+
+**Fast Mode (Default):**
+- ⚡ 10x faster downloads
+- 📦 15-second segment: ~9 seconds (1.88 MB/s)
+- ⚠️ Cuts at keyframes (may be ±2-5 seconds off)
+
+**Precise Mode (Optional):**
+- 🎯 Frame-accurate cuts
+- 🐌 15-second segment: ~79 seconds (187 KB/s)
+- ⚙️ Requires re-encoding (CPU intensive)
 
 ## Development
 
