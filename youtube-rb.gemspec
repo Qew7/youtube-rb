@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.description   = "A Ruby library inspired by youtube-dl for downloading videos, extracting video segments, and fetching subtitles from YouTube and other video platforms"
   spec.homepage      = "https://github.com/Qew7/youtube-rb"
   spec.license       = "MIT"
-  spec.required_ruby_version = ">= 2.7.0"
+  spec.required_ruby_version = ">= 3.4.0"
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/Qew7/youtube-rb"
@@ -23,16 +23,17 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   # Runtime dependencies
-  spec.add_dependency "faraday", "~> 2.7"
-  spec.add_dependency "faraday-retry", "~> 2.2"
-  spec.add_dependency "nokogiri", "~> 1.16"
+  spec.add_dependency "faraday", "~> 2.14"
+  spec.add_dependency "faraday-retry", "~> 2.4"
+  spec.add_dependency "nokogiri", "~> 1.19"
   spec.add_dependency "streamio-ffmpeg", "~> 3.0"
   spec.add_dependency "addressable", "~> 2.8"
+  spec.add_dependency "base64", "~> 0.2"
 
   # Development dependencies
-  spec.add_development_dependency "bundler", "~> 2.0"
+  spec.add_development_dependency "bundler", ">= 2.7"
   spec.add_development_dependency "rake", "~> 13.0"
-  spec.add_development_dependency "rspec", "~> 3.0"
-  spec.add_development_dependency "webmock", "~> 3.19"
-  spec.add_development_dependency "vcr", "~> 6.2"
+  spec.add_development_dependency "rspec", "~> 3.13"
+  spec.add_development_dependency "webmock", "~> 3.26"
+  spec.add_development_dependency "vcr", "~> 6.4"
 end
