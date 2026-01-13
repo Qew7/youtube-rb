@@ -120,10 +120,12 @@ module YoutubeRb
     end
 
     # Check if optional tools are available
-    # @return [Hash] Status of optional tools (only FFmpeg is used for segments)
+    # @return [Hash] Status of optional tools
     def check_dependencies
       {
-        ffmpeg: system('which ffmpeg > /dev/null 2>&1')
+        ffmpeg: system('which ffmpeg > /dev/null 2>&1'),
+        ytdlp: YtdlpWrapper.available?,
+        ytdlp_version: YtdlpWrapper.version
       }
     end
 

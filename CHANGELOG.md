@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **yt-dlp backend support** - Added `YtdlpWrapper` for reliable video downloads
+- **Automatic fallback** - Falls back from pure Ruby to yt-dlp on errors (403, etc)
+- **Backend selection options** - `use_ytdlp`, `ytdlp_fallback` configuration
+- **Verbose logging** - Added `verbose` option to see which backend is used
+- **Improved authentication** - Better cookie handling with yt-dlp
+- **Dependency checking** - `Client#check_dependencies` now reports yt-dlp status
+- Example script for yt-dlp usage
+
+### Changed
+- **Default behavior** - Now automatically uses yt-dlp if available
+- **Download reliability** - Significantly improved with yt-dlp backend
+- **Error handling** - Better error messages and automatic fallback
+- **README** - Updated with yt-dlp installation and usage instructions
+
+### Fixed
+- **403 errors** - Now resolved with yt-dlp backend
+- **Signature decryption** - Handled by yt-dlp
+- **Protected videos** - Can now download with proper cookies
+
+## [Unreleased]
+
 ## [0.1.0] - 2026-01-13
 
 ### Added

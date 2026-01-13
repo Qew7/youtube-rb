@@ -29,9 +29,19 @@ RSpec.describe YoutubeRb do
       it "returns hash with dependency status" do
         deps = client.check_dependencies
         expect(deps).to be_a(Hash)
-        expect(deps).to have_key(:yt_dlp)
-        expect(deps).to have_key(:youtube_dl)
         expect(deps).to have_key(:ffmpeg)
+        expect(deps).to have_key(:ytdlp)
+        expect(deps).to have_key(:ytdlp_version)
+      end
+
+      it "checks ffmpeg availability" do
+        deps = client.check_dependencies
+        expect([true, false]).to include(deps[:ffmpeg])
+      end
+
+      it "checks yt-dlp availability" do
+        deps = client.check_dependencies
+        expect([true, false]).to include(deps[:ytdlp])
       end
     end
 
@@ -49,26 +59,36 @@ RSpec.describe YoutubeRb do
         expect(options.format).to eq('best')
         expect(options.quality).to eq('best')
         expect(options.output_path).to eq('./downloads')
+        expect(options.use_ytdlp).to eq(false)
+        expect(options.ytdlp_fallback).to eq(true)
+        expect(options.verbose).to eq(false)
       end
 
       it "creates with custom options" do
         options = YoutubeRb::Options.new(
           format: '1080p',
           output_path: '/tmp',
-          write_subtitles: true
+          write_subtitles: true,
+          use_ytdlp: true,
+          verbose: true
         )
         expect(options.format).to eq('1080p')
         expect(options.output_path).to eq('/tmp')
         expect(options.write_subtitles).to eq(true)
+        expect(options.use_ytdlp).to eq(true)
+        expect(options.verbose).to eq(true)
       end
     end
 
     describe "#to_h" do
       it "returns hash representation" do
-        options = YoutubeRb::Options.new(format: 'best')
+        options = YoutubeRb::Options.new(format: 'best', use_ytdlp: true)
         hash = options.to_h
         expect(hash).to be_a(Hash)
         expect(hash[:format]).to eq('best')
+        expect(hash[:use_ytdlp]).to eq(true)
+        expect(hash).to have_key(:ytdlp_fallback)
+        expect(hash).to have_key(:verbose)
       end
     end
 
@@ -155,27 +175,6 @@ RSpec.describe YoutubeRb do
     describe "#initialize" do
       it "creates extractor with URL" do
         expect(extractor.url).to eq('https://www.youtube.com/watch?v=test')
-      end
-    end
-
-    describe "#ytdlp_available?" do
-      it "checks if yt-dlp is available" do
-        result = extractor.ytdlp_available?
-        expect([true, false]).to include(result)
-      end
-    end
-
-    describe "#youtube_dl_available?" do
-      it "checks if youtube-dl is available" do
-        result = extractor.youtube_dl_available?
-        expect([true, false]).to include(result)
-      end
-    end
-
-    describe "#available?" do
-      it "checks if any extraction tool is available" do
-        result = extractor.available?
-        expect([true, false]).to include(result)
       end
     end
   end

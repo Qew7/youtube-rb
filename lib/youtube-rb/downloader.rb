@@ -12,28 +12,22 @@ module YoutubeRb
       @url = url
       @options = options.is_a?(Options) ? options : Options.new(**options)
       @extractor = Extractor.new(url, @options.to_h)
+      @ytdlp_wrapper = nil
       @video_info = nil
+      @tried_ytdlp = false
+      @tried_ruby = false
     end
 
     # Download full video
     def download
       ensure_output_directory
-      @video_info = @extractor.extract_info
       
-      output_file = generate_output_path(@video_info)
-      
-      if @options.extract_audio
-        download_audio(output_file)
+      # Choose backend: yt-dlp or pure Ruby
+      if should_use_ytdlp?
+        download_with_ytdlp
       else
-        download_video(output_file)
+        download_with_ruby
       end
-
-      download_subtitles if @options.write_subtitles || @options.write_auto_sub
-      download_metadata if @options.write_info_json
-      download_thumbnail if @options.write_thumbnail
-      download_description if @options.write_description
-
-      output_file
     end
 
     # Download video segment (time range)
@@ -42,6 +36,110 @@ module YoutubeRb
       raise ArgumentError, "Segment must be between 10 and 60 seconds" unless valid_segment_duration?(start_time, end_time)
 
       ensure_output_directory
+      
+      # Use yt-dlp for segments if available (more efficient)
+      if should_use_ytdlp?
+        download_segment_with_ytdlp(start_time, end_time, output_file)
+      else
+        download_segment_with_ruby(start_time, end_time, output_file)
+      end
+    end
+
+    # Download only subtitles
+    def download_subtitles_only(langs = nil)
+      ensure_output_directory
+      @video_info = @extractor.extract_info
+      
+      langs ||= @options.subtitle_langs
+      download_subtitles(langs)
+    end
+
+    # Get video information without downloading
+    def info
+      @video_info ||= @extractor.extract_info
+    end
+
+    private
+
+    def should_use_ytdlp?
+      # Use yt-dlp if:
+      # 1. Explicitly requested via options
+      # 2. yt-dlp is available
+      if @options.use_ytdlp && ytdlp_available?
+        return true
+      end
+      
+      # Don't use yt-dlp if explicitly disabled
+      if @options.use_ytdlp == false
+        return false
+      end
+      
+      # Default: use yt-dlp if available for better reliability
+      ytdlp_available?
+    end
+
+    def ytdlp_available?
+      @ytdlp_available ||= YtdlpWrapper.available?
+    end
+
+    def ytdlp_wrapper
+      @ytdlp_wrapper ||= YtdlpWrapper.new(@options)
+    end
+
+    def download_with_ytdlp
+      log "Using yt-dlp backend for download"
+      @tried_ytdlp = true
+      
+      begin
+        output_file = ytdlp_wrapper.download(@url)
+        log "Downloaded successfully with yt-dlp: #{output_file}"
+        output_file
+      rescue YtdlpWrapper::YtdlpError => e
+        handle_ytdlp_error(e)
+      end
+    end
+
+    def download_with_ruby
+      log "Using pure Ruby backend for download"
+      @tried_ruby = true
+      
+      begin
+        @video_info = @extractor.extract_info
+        
+        output_file = generate_output_path(@video_info)
+        
+        if @options.extract_audio
+          download_audio(output_file)
+        else
+          download_video(output_file)
+        end
+
+        download_subtitles if @options.write_subtitles || @options.write_auto_sub
+        download_metadata if @options.write_info_json
+        download_thumbnail if @options.write_thumbnail
+        download_description if @options.write_description
+
+        output_file
+      rescue => e
+        handle_ruby_error(e)
+      end
+    end
+
+    def download_segment_with_ytdlp(start_time, end_time, output_file)
+      log "Using yt-dlp backend for segment download"
+      
+      begin
+        output_file = ytdlp_wrapper.download_segment(@url, start_time, end_time, output_file)
+        log "Downloaded segment successfully with yt-dlp: #{output_file}"
+        output_file
+      rescue YtdlpWrapper::YtdlpError => e
+        handle_ytdlp_error(e, fallback: -> { download_segment_with_ruby(start_time, end_time, output_file) })
+      end
+    end
+
+    def download_segment_with_ruby(start_time, end_time, output_file)
+      log "Using pure Ruby backend for segment download"
+      
       @video_info = @extractor.extract_info
       
       output_file ||= generate_segment_output_path(@video_info, start_time, end_time)
@@ -65,21 +163,44 @@ module YoutubeRb
       output_file
     end
 
-    # Download only subtitles
-    def download_subtitles_only(langs = nil)
-      ensure_output_directory
-      @video_info = @extractor.extract_info
+    def handle_ytdlp_error(error, fallback: nil)
+      log "yt-dlp error: #{error.message}"
       
-      langs ||= @options.subtitle_langs
-      download_subtitles(langs)
+      # Try fallback to pure Ruby if enabled and not already tried
+      if @options.ytdlp_fallback && !@tried_ruby
+        if fallback
+          log "Falling back to pure Ruby implementation"
+          return fallback.call
+        else
+          log "Falling back to pure Ruby implementation"
+          return download_with_ruby
+        end
+      end
+      
+      raise DownloadError, "yt-dlp failed: #{error.message}"
     end
 
-    # Get video information without downloading
-    def info
-      @video_info ||= @extractor.extract_info
+    def handle_ruby_error(error)
+      log "Pure Ruby error: #{error.message}"
+      
+      # Try fallback to yt-dlp if:
+      # 1. It's a 403 error (signature/auth issue)
+      # 2. ytdlp_fallback is enabled
+      # 3. yt-dlp is available
+      # 4. Haven't tried yt-dlp yet
+      if @options.ytdlp_fallback && ytdlp_available? && !@tried_ytdlp
+        if error.message.include?('403') || error.is_a?(Extractor::ExtractionError)
+          log "Falling back to yt-dlp"
+          return download_with_ytdlp
+        end
+      end
+      
+      raise DownloadError, "Download failed: #{error.message}"
     end
 
-    private
+    def log(message)
+      puts "[YoutubeRb] #{message}" if @options.verbose
+    end
 
     def download_video(output_file)
       # Always use HTTP download (pure Ruby)
@@ -249,10 +370,10 @@ module YoutubeRb
       in_cue = false
       
       lines.each do |line|
-        if line.match?(/(\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[.,]\d{3})/)
+        if match_data = line.match(/(\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[.,]\d{3})/)
           # This is a timestamp line
-          cue_start = parse_subtitle_time($1)
-          cue_end = parse_subtitle_time($2)
+          cue_start = parse_subtitle_time(match_data[1])
+          cue_end = parse_subtitle_time(match_data[2])
           
           if cue_end >= start_time && cue_start <= end_time
             # Adjust timestamps relative to segment start

@@ -18,7 +18,15 @@ module YoutubeRb
     attr_accessor :match_title, :reject_title, :date, :datebefore, :dateafter,
                   :min_views, :max_views, :no_playlist, :yes_playlist
 
+    # Backend selection
+    attr_accessor :use_ytdlp, :ytdlp_fallback, :verbose
+
     def initialize(**options)
+      # Backend selection
+      @use_ytdlp = options.fetch(:use_ytdlp, false)
+      @ytdlp_fallback = options.fetch(:ytdlp_fallback, true)
+      @verbose = options.fetch(:verbose, false)
+
       # Video Selection
       @playlist_start = options[:playlist_start]
       @playlist_end = options[:playlist_end]
@@ -81,6 +89,9 @@ module YoutubeRb
 
     def to_h
       {
+        use_ytdlp: @use_ytdlp,
+        ytdlp_fallback: @ytdlp_fallback,
+        verbose: @verbose,
         format: @format,
         quality: @quality,
         output_path: @output_path,

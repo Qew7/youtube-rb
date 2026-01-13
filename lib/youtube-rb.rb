@@ -2,6 +2,7 @@ require_relative "youtube-rb/version"
 require_relative "youtube-rb/options"
 require_relative "youtube-rb/video_info"
 require_relative "youtube-rb/extractor"
+require_relative "youtube-rb/ytdlp_wrapper"
 require_relative "youtube-rb/downloader"
 require_relative "youtube-rb/client"
 

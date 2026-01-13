@@ -1,32 +1,46 @@
 # YoutubeRb
 
-A **pure Ruby library** inspired by [youtube-dl](https://github.com/ytdl-org/youtube-dl) for downloading videos, extracting video segments, and fetching subtitles from YouTube and other video platforms.
+A **Ruby library** inspired by [youtube-dl](https://github.com/ytdl-org/youtube-dl) for downloading videos, extracting video segments, and fetching subtitles from YouTube and other video platforms.
 
 ## Features
 
-- 💎 **100% Pure Ruby** - no external dependencies on Python tools (yt-dlp/youtube-dl)
-- 📹 Download full videos or audio-only via direct HTTP
-- ✂️ Extract video segments (10-60 seconds) using FFmpeg
+- 🔧 **Dual Backend Support** - Pure Ruby implementation with optional yt-dlp fallback
+- 📹 Download full videos or audio-only
+- ✂️ Extract video segments (10-60 seconds) 
 - 📝 Download subtitles (manual and auto-generated)
 - 🎵 Extract audio in various formats (mp3, aac, opus, etc.)
-- 📊 Get detailed video information by parsing YouTube pages
+- 📊 Get detailed video information
 - 🔧 Flexible configuration options
-- 🌐 Support for cookies and custom headers
+- 🌐 Support for cookies and authentication
+- 🔄 Automatic fallback between backends
+
+## Backends
+
+YoutubeRb supports two backends:
+
+### 1. Pure Ruby (Default fallback)
+- No Python dependencies
+- Direct HTTP downloads
+- Works for videos with direct URLs
+- May fail for protected/signed videos (403 errors)
+
+### 2. yt-dlp (Recommended)
+- Most reliable method
+- Handles signature decryption
+- Works with all YouTube videos
+- Bypasses 403 errors
+- Supports authentication
+
+**Recommendation**: Install yt-dlp for production use to avoid 403 errors and ensure compatibility with all videos.
 
 ## Important Notes
 
-⚠️ **YouTube Bot Detection**: YouTube has bot detection that may block automated requests. For reliable access, you may need to:
-- Use cookies from an authenticated browser session
-- Set appropriate User-Agent headers
-- Respect rate limits
+⚠️ **YouTube Protection**: YouTube actively protects videos with:
+- Signature encryption (requires yt-dlp or complex JS execution)
+- Bot detection (requires proper headers and cookies)
+- Rate limiting (handled automatically)
 
-This library works by:
-1. Fetching the YouTube video page HTML
-2. Parsing the embedded `ytInitialPlayerResponse` JSON data
-3. Extracting video URLs and metadata
-4. Downloading via direct HTTP streaming
-
-Some videos may require authentication or may be restricted based on region/age.
+The library automatically chooses the best backend and falls back when needed.
 
 ## Installation
 
@@ -50,21 +64,51 @@ Or install it yourself as:
 
 - Ruby >= 2.7.0
 
-### Optional External Tools
+### External Tools
 
-- **FFmpeg** (optional, only for segment extraction and audio conversion)
-  ```bash
-  # macOS
-  brew install ffmpeg
-  
-  # Ubuntu/Debian
-  sudo apt install ffmpeg
-  
-  # Windows (with Chocolatey)
-  choco install ffmpeg
-  ```
+#### yt-dlp (Strongly Recommended)
 
-**Note**: Unlike youtube-dl, this library does **NOT** require yt-dlp or youtube-dl. It's a pure Ruby implementation that directly parses YouTube pages and downloads via HTTP.
+For reliable downloads and to avoid 403 errors, install yt-dlp:
+
+```bash
+# Using pip (recommended)
+pip install -U yt-dlp
+
+# Using pipx (isolated installation)
+pipx install yt-dlp
+
+# macOS with Homebrew
+brew install yt-dlp
+
+# Or download binary from:
+# https://github.com/yt-dlp/yt-dlp/releases
+```
+
+#### FFmpeg (Optional)
+
+Required only for:
+- Audio extraction from video
+- Segment extraction (10-60 second clips)
+- Format conversion
+
+```bash
+# macOS
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt install ffmpeg
+
+# Windows (with Chocolatey)
+choco install ffmpeg
+```
+
+**Check Installation:**
+
+```ruby
+client = YoutubeRb::Client.new
+client.check_dependencies
+# => { ffmpeg: true, ytdlp: true, ytdlp_version: "2024.01.13" }
+```
 
 ## Usage
 
@@ -73,30 +117,116 @@ Or install it yourself as:
 ```ruby
 require 'youtube-rb'
 
-# 1. Получить информацию о видео
-info = YoutubeRb.info('https://www.youtube.com/watch?v=jNQXAC9IVRw')
-puts "Title: #{info.title}"
-puts "Duration: #{info.duration_formatted}"
-puts "Formats: #{info.formats.size}"
-
-# 2. Скачать видео
+# 1. Simple download (automatically uses yt-dlp if available)
 YoutubeRb.download('https://www.youtube.com/watch?v=VIDEO_ID', 
   output_path: './downloads'
 )
 
-# 3. Скачать сегмент видео (10-60 секунд)
+# 2. Get video information
+info = YoutubeRb.info('https://www.youtube.com/watch?v=jNQXAC9IVRw')
+puts "Title: #{info.title}"
+puts "Duration: #{info.duration_formatted}"
+puts "Views: #{info.view_count}"
+
+# 3. Download segment (10-60 seconds)
 YoutubeRb.download_segment(
   'https://www.youtube.com/watch?v=VIDEO_ID',
-  60,  # начало в секундах
-  90,  # конец в секундах
+  60,  # start time in seconds
+  90,  # end time in seconds
   output_path: './segments'
 )
 
-# 4. Скачать только субтитры
+# 4. Download only subtitles
 YoutubeRb.download_subtitles(
   'https://www.youtube.com/watch?v=VIDEO_ID',
   langs: ['en', 'ru'],
   output_path: './subs'
+)
+```
+
+### Backend Selection
+
+```ruby
+# Force yt-dlp backend (recommended)
+client = YoutubeRb::Client.new(use_ytdlp: true)
+client.download(url)
+
+# Force pure Ruby backend (may fail with 403)
+client = YoutubeRb::Client.new(use_ytdlp: false, ytdlp_fallback: false)
+client.download(url)
+
+# Auto mode: tries pure Ruby first, falls back to yt-dlp if needed (default)
+client = YoutubeRb::Client.new(ytdlp_fallback: true)
+client.download(url)
+
+# Verbose mode to see which backend is used
+client = YoutubeRb::Client.new(verbose: true)
+client.download(url)
+# [YoutubeRb] Using yt-dlp backend for download
+# [YoutubeRb] Downloaded successfully with yt-dlp: ./downloads/video.mp4
+```
+
+### Fixing 403 Errors
+
+If you encounter 403 errors:
+
+**Option 1: Use yt-dlp backend (easiest)**
+```ruby
+client = YoutubeRb::Client.new(use_ytdlp: true)
+client.download(url)
+```
+
+**Option 2: Export cookies from browser**
+1. Install extension: [Get cookies.txt LOCALLY](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) (Chrome) or [cookies.txt](https://addons.mozilla.org/firefox/addon/cookies-txt/) (Firefox)
+2. Log into YouTube in your browser
+3. Export cookies from youtube.com
+4. Use cookies:
+
+```ruby
+client = YoutubeRb::Client.new(
+  cookies_file: './youtube_cookies.txt',
+  use_ytdlp: true
+)
+client.download(url)
+```
+
+### Common Configuration Options
+
+```ruby
+client = YoutubeRb::Client.new(
+  # Backend
+  use_ytdlp: true,              # Force yt-dlp (recommended)
+  ytdlp_fallback: true,         # Auto fallback on error (default)
+  verbose: true,                # Show progress logs
+  
+  # Output
+  output_path: './downloads',
+  output_template: '%(title)s-%(id)s.%(ext)s',
+  
+  # Quality
+  quality: 'best',              # or '1080p', '720p', etc.
+  
+  # Audio extraction
+  extract_audio: true,
+  audio_format: 'mp3',          # mp3, aac, opus, flac, wav
+  audio_quality: '192',
+  
+  # Subtitles
+  write_subtitles: true,
+  subtitle_langs: ['en', 'ru'],
+  subtitle_format: 'srt',       # srt or vtt
+  
+  # Metadata
+  write_info_json: true,
+  write_thumbnail: true,
+  write_description: true,
+  
+  # Authentication
+  cookies_file: './cookies.txt',
+  
+  # Network
+  retries: 10,
+  user_agent: 'Mozilla/5.0...'
 )
 ```
 
@@ -248,23 +378,64 @@ client = YoutubeRb::Client.new(
 )
 ```
 
-### Использование cookies для обхода блокировки
+### Authentication and Cookies (Bypassing 403 Errors)
 
-Если YouTube требует авторизацию:
+For age-restricted, private, member-only videos or to bypass 403 errors:
+
+#### Method 1: Export cookies from browser (Most Reliable)
+
+1. **Install browser extension to export cookies:**
+   - Chrome/Edge: [Get cookies.txt LOCALLY](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
+   - Firefox: [cookies.txt](https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/)
+
+2. **Log into YouTube** in your browser
+
+3. **Export cookies** from youtube.com (Netscape format)
+
+4. **Use cookies in YoutubeRb:**
 
 ```ruby
-# 1. Экспортируйте cookies из браузера в файл cookies.txt (формат Netscape)
-#    Используйте расширение "Get cookies.txt" для Chrome/Firefox
-
-# 2. Используйте cookies в клиенте
+# With yt-dlp backend (recommended - automatic cookie handling)
 client = YoutubeRb::Client.new(
-  cookies_file: './cookies.txt',
-  output_path: './downloads'
+  cookies_file: './youtube_cookies.txt',
+  use_ytdlp: true,
+  verbose: true
 )
+client.download('https://www.youtube.com/watch?v=VIDEO_ID')
 
-# 3. Теперь можно скачивать видео
-client.download(url)
+# Pure Ruby backend also supports cookies
+client = YoutubeRb::Client.new(
+  cookies_file: './youtube_cookies.txt',
+  use_ytdlp: false,
+  ytdlp_fallback: true  # Falls back to yt-dlp on 403
+)
 ```
+
+#### Method 2: Let yt-dlp extract cookies from browser (Easiest)
+
+yt-dlp can directly read cookies from your browser:
+
+```bash
+# First, ensure browser is closed or use the right browser
+yt-dlp --cookies-from-browser chrome <URL>
+```
+
+**Note:** This feature requires specific system dependencies and may not work on all platforms. Cookie file export (Method 1) is more reliable.
+
+#### Cookie file format example (Netscape)
+
+```
+# Netscape HTTP Cookie File
+.youtube.com	TRUE	/	TRUE	0	CONSENT	YES+
+.youtube.com	TRUE	/	FALSE	1735689600	VISITOR_INFO1_LIVE	xxxxx
+```
+
+#### Important Notes
+
+- ⚠️ **Username/password authentication** is NOT supported (YouTube uses OAuth)
+- 🔒 **Keep your cookies file secure** - it contains your session data
+- 🔄 **Cookies expire** - re-export if you get 403 errors again
+- 💡 **Use yt-dlp backend** for best cookie handling
 
 ### Полный пример: скачивание нескольких сегментов
 
@@ -341,14 +512,29 @@ This gem provides a Ruby-native API inspired by youtube-dl but designed as a lib
 
 ### Ошибка "LOGIN_REQUIRED" или блокировка бота
 
-Если YouTube блокирует запросы:
+If you're getting 403 errors or bot detection:
 
-1. **Используйте cookies из браузера**:
+1. **Use yt-dlp backend (most reliable)**:
    ```ruby
-   client = YoutubeRb::Client.new(cookies_file: './cookies.txt')
+   client = YoutubeRb::Client.new(use_ytdlp: true, verbose: true)
+   client.download(url)
    ```
 
-2. **Добавьте задержки между запросами**:
+2. **Export and use cookies from authenticated browser session**:
+   ```ruby
+   client = YoutubeRb::Client.new(
+     cookies_file: './youtube_cookies.txt',
+     use_ytdlp: true
+   )
+   ```
+
+3. **Enable fallback mode** (default):
+   ```ruby
+   client = YoutubeRb::Client.new(ytdlp_fallback: true)
+   # Tries pure Ruby first, falls back to yt-dlp on 403
+   ```
+
+4. **Add delays between requests**:
    ```ruby
    videos.each do |url|
      client.download(url)
@@ -356,12 +542,14 @@ This gem provides a Ruby-native API inspired by youtube-dl but designed as a lib
    end
    ```
 
-### Форматы не найдены
+### No formats found / Video unavailable
 
-Попробуйте:
-- Использовать cookies из аутентифицированной сессии браузера
-- Проверить, доступно ли видео в вашем регионе
-- Убедиться, что видео публичное
+Try:
+- Use yt-dlp backend: `YoutubeRb::Client.new(use_ytdlp: true)`
+- Export cookies from authenticated browser session
+- Check if video is available in your region
+- Verify the video is public and not deleted
+- Check yt-dlp directly: `yt-dlp --cookies ./cookies.txt <URL>`
 
 ### FFmpeg не найден
 

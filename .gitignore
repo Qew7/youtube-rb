@@ -10,6 +10,18 @@
 /test/version_tmp/
 /tmp/
 
+# RSpec status file
+.rspec_status
+
+# Test downloads
+/downloads/
+/test_downloads/
+/test_real_downloads/
+# /spec/tmp/real_downloads/
+
+# Cookie files (contain sensitive data)
+*cookies*.txt
+
 # Used by dotenv library to load environment variables.
 .env
 

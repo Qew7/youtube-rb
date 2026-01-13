@@ -1,3 +1,6 @@
 --require spec_helper
 --color
 --format documentation
+--tag ~integration
+--tag ~slow
+--tag ~real_download
