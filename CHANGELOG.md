@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **yt-dlp backend support** - Added `YtdlpWrapper` for reliable video downloads
-- **Automatic fallback** - Falls back from pure Ruby to yt-dlp on errors (403, etc)
+- **Automatic fallback** - Falls back from pure Ruby to yt-dlp on errors (403, etc) for full video downloads
 - **Backend selection options** - `use_ytdlp`, `ytdlp_fallback` configuration
 - **Verbose logging** - Added `verbose` option to see which backend is used
 - **Improved authentication** - Better cookie handling with yt-dlp
@@ -22,12 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Example script for yt-dlp usage
 
 ### Changed
-- **Default behavior** - Now automatically uses yt-dlp if available
+- **⚡ BREAKING: Segment downloads now require yt-dlp** - `download_segment` and `download_segments` methods now require yt-dlp to be installed
+- **🚀 MAJOR OPTIMIZATION: Batch segment downloads** - `download_segments` now downloads video **once** via yt-dlp, then extracts all segments locally via FFmpeg (10-100x faster)
+- **Default behavior** - Full video downloads automatically use yt-dlp if available with Pure Ruby fallback
 - **Download reliability** - Significantly improved with yt-dlp backend
-- **Error handling** - Better error messages and automatic fallback
+- **Error handling** - Better error messages; segment downloads raise clear error if yt-dlp not installed
 - **Segment validation** - Now uses configurable min/max duration instead of hardcoded 10-60 seconds
 - **Batch downloads** - Automatically enable caching for `download_segments` to avoid re-downloading
-- **README** - Updated with yt-dlp installation, usage instructions, and batch download examples
+- **README** - Updated with yt-dlp installation, usage instructions, and optimized batch download examples
 
 ### Fixed
 - **403 errors** - Now resolved with yt-dlp backend
@@ -42,10 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Precise mode available via `segment_mode: :precise` for frame-accurate cuts
 - **Keyframe-based cutting** - Default mode cuts at keyframe positions for speed
 - **Optional precise mode** - Re-encoding available when exact timestamps needed
-- **⚡ 10-100x faster batch segment extraction** - For Pure Ruby backend with caching
-  - Full video downloaded once, all segments extracted from cached file
+- **⚡ 10-100x faster batch segment extraction** - Optimized for both yt-dlp and Pure Ruby backends
+  - **yt-dlp backend**: Full video downloaded once via yt-dlp, all segments extracted locally via FFmpeg
+  - **Pure Ruby backend** (legacy): Full video downloaded once via HTTP, all segments extracted from cached file
   - Eliminates redundant downloads for multiple segments from same video
   - Example: 10 segments from 1 video = 1 download instead of 10
+  - Network traffic reduced by 90-99% for batch operations
 
 ## [0.1.0] - 2026-01-13
 

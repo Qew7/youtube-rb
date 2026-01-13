@@ -4,44 +4,41 @@ A **Ruby library** inspired by [youtube-dl](https://github.com/ytdl-org/youtube-
 
 ## Features
 
-- 🔧 **Dual Backend Support** - Pure Ruby implementation with optional yt-dlp fallback
+- 🔧 **yt-dlp Backend** - Reliable video downloads with full YouTube support
 - 📹 Download full videos or audio-only
 - ✂️ Extract video segments (10-60 seconds) 
-- ⚡ **Fast segment downloads** - 10x faster with optimized stream copy mode
+- ⚡ **Optimized batch segment downloads** - Download video once, extract multiple segments locally (10-100x faster)
 - 📝 Download subtitles (manual and auto-generated)
 - 🎵 Extract audio in various formats (mp3, aac, opus, etc.)
 - 📊 Get detailed video information
 - 🔧 Flexible configuration options
 - 🌐 Support for cookies and authentication
-- 🔄 Automatic fallback between backends
 
-## Backends
+## Backend
 
-YoutubeRb supports two backends:
+YoutubeRb uses **yt-dlp** as its backend for reliable video downloads:
 
-### 1. Pure Ruby (Default fallback)
-- No Python dependencies
-- Direct HTTP downloads
-- Works for videos with direct URLs
-- May fail for protected/signed videos (403 errors)
-
-### 2. yt-dlp (Recommended)
-- Most reliable method
-- Handles signature decryption
+### yt-dlp (Required for segment downloads)
+- Most reliable method for YouTube downloads
+- Handles signature decryption automatically
 - Works with all YouTube videos
 - Bypasses 403 errors
-- Supports authentication
+- Supports authentication via cookies
+- **Optimized for batch processing**: Downloads video once, extracts multiple segments locally
 
-**Recommendation**: Install yt-dlp for production use to avoid 403 errors and ensure compatibility with all videos.
+**Note**: yt-dlp is **required** for segment downloads (`download_segment` and `download_segments` methods). Full video downloads still support Pure Ruby fallback with automatic retry using yt-dlp.
 
 ## Important Notes
 
 ⚠️ **YouTube Protection**: YouTube actively protects videos with:
-- Signature encryption (requires yt-dlp or complex JS execution)
+- Signature encryption (handled by yt-dlp)
 - Bot detection (requires proper headers and cookies)
 - Rate limiting (handled automatically)
 
-The library automatically chooses the best backend and falls back when needed.
+💡 **Batch Optimization**: When downloading multiple segments from the same video, the library automatically:
+1. Downloads the full video **once** via yt-dlp
+2. Extracts all segments locally using FFmpeg
+3. Result: **10-100x faster** than downloading each segment separately
 
 ## Installation
 
@@ -130,6 +127,7 @@ puts "Duration: #{info.duration_formatted}"
 puts "Views: #{info.view_count}"
 
 # 3. Download single segment (10-60 seconds by default)
+# Requires yt-dlp to be installed
 YoutubeRb.download_segment(
   'https://www.youtube.com/watch?v=VIDEO_ID',
   60,  # start time in seconds
@@ -137,7 +135,9 @@ YoutubeRb.download_segment(
   output_path: './segments'
 )
 
-# 4. Download multiple segments (batch processing)
+# 4. Download multiple segments (batch processing - OPTIMIZED!)
+# Downloads video ONCE via yt-dlp, then extracts all segments locally
+# This is 10-100x faster than downloading each segment separately
 YoutubeRb.download_segments(
   'https://www.youtube.com/watch?v=VIDEO_ID',
   [
@@ -156,26 +156,22 @@ YoutubeRb.download_subtitles(
 )
 ```
 
-### Backend Selection
+### Backend Configuration
 
 ```ruby
-# Force yt-dlp backend (recommended)
-client = YoutubeRb::Client.new(use_ytdlp: true)
-client.download(url)
-
-# Force pure Ruby backend (may fail with 403)
-client = YoutubeRb::Client.new(use_ytdlp: false, ytdlp_fallback: false)
-client.download(url)
-
-# Auto mode: tries pure Ruby first, falls back to yt-dlp if needed (default)
-client = YoutubeRb::Client.new(ytdlp_fallback: true)
-client.download(url)
-
-# Verbose mode to see which backend is used
+# Recommended: Enable verbose mode to see what's happening
 client = YoutubeRb::Client.new(verbose: true)
 client.download(url)
 # [YoutubeRb] Using yt-dlp backend for download
 # [YoutubeRb] Downloaded successfully with yt-dlp: ./downloads/video.mp4
+
+# Full video downloads: Pure Ruby with yt-dlp fallback (default)
+client = YoutubeRb::Client.new(ytdlp_fallback: true)
+client.download(url)  # Tries Pure Ruby first, falls back to yt-dlp on 403
+
+# Segment downloads: Always use yt-dlp (required)
+client.download_segment(url, 10, 30)  # Requires yt-dlp
+client.download_segments(url, segments)  # Requires yt-dlp, optimized for batch
 ```
 
 ### Fixing 403 Errors
@@ -340,9 +336,10 @@ puts "Downloaded #{output_files.size} segments"
 
 **Преимущества пакетной загрузки:**
 
-- **Автоматическое кэширование**: Полное видео скачивается один раз, все сегменты вырезаются из него
-- **Быстрее в 10-100x**: Для Pure Ruby backend не нужно перекачивать видео для каждого сегмента
+- **Оптимизация yt-dlp**: Видео скачивается через yt-dlp **один раз**, все сегменты вырезаются локально через FFmpeg
+- **Быстрее в 10-100x**: Не нужно перекачивать видео для каждого сегмента
 - **Экономия трафика**: Полное видео загружается один раз вместо N раз
+- **Надежность**: Использует yt-dlp для обхода защиты YouTube, FFmpeg для быстрой нарезки
 
 ```ruby
 # С пользовательскими именами файлов

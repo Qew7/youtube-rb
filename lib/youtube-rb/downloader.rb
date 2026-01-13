@@ -42,12 +42,12 @@ module YoutubeRb
 
       ensure_output_directory
       
-      # Use yt-dlp for segments if available (more efficient)
-      if should_use_ytdlp?
-        download_segment_with_ytdlp(start_time, end_time, output_file)
-      else
-        download_segment_with_ruby(start_time, end_time, output_file)
+      # Always use yt-dlp for segment downloads (most efficient and reliable)
+      unless ytdlp_available?
+        raise DownloadError, "yt-dlp is required for segment downloads. Please install yt-dlp."
       end
+      
+      download_segment_with_ytdlp(start_time, end_time, output_file)
     end
 
     # Download multiple video segments (batch processing)
@@ -73,12 +73,12 @@ module YoutubeRb
 
       ensure_output_directory
       
-      # Use yt-dlp for batch if available (more efficient)
-      if should_use_ytdlp?
-        download_segments_with_ytdlp(segments)
-      else
-        download_segments_with_ruby(segments)
+      # Always use yt-dlp for batch segment downloads (most efficient and reliable)
+      unless ytdlp_available?
+        raise DownloadError, "yt-dlp is required for batch segment downloads. Please install yt-dlp."
       end
+      
+      download_segments_with_ytdlp(segments)
     end
 
     # Download only subtitles
@@ -164,74 +164,21 @@ module YoutubeRb
     def download_segment_with_ytdlp(start_time, end_time, output_file)
       log "Using yt-dlp backend for segment download"
       
-      begin
-        output_file = ytdlp_wrapper.download_segment(@url, start_time, end_time, output_file)
-        log "Downloaded segment successfully with yt-dlp: #{output_file}"
-        output_file
-      rescue YtdlpWrapper::YtdlpError => e
-        handle_ytdlp_error(e, fallback: -> { download_segment_with_ruby(start_time, end_time, output_file) })
-      end
-    end
-
-    def download_segment_with_ruby(start_time, end_time, output_file)
-      log "Using pure Ruby backend for segment download"
-      
-      @video_info = @extractor.extract_info
-      
-      output_file ||= generate_segment_output_path(@video_info, start_time, end_time)
-
-      begin
-        # Get full video (from cache or download)
-        full_video_path = get_full_video_for_segmentation
-        
-        # Extract segment using ffmpeg
-        extract_segment(full_video_path, output_file, start_time, end_time)
-        
-        # Download subtitles for segment if requested
-        if @options.write_subtitles || @options.write_auto_sub
-          download_subtitles_for_segment(start_time, end_time)
-        end
-      ensure
-        # Clean up cache if not enabled
-        cleanup_video_cache unless @options.cache_full_video
-      end
-
+      output_file = ytdlp_wrapper.download_segment(@url, start_time, end_time, output_file)
+      log "Downloaded segment successfully with yt-dlp: #{output_file}"
       output_file
     end
 
     def download_segments_with_ytdlp(segments)
-      log "Using yt-dlp backend for batch segment download"
+      log "Using yt-dlp backend for batch segment download (optimized: 1 download + local segmentation)"
       
       output_files = []
       
-      # yt-dlp doesn't have built-in batch segment support, so we download one by one
-      # But we can reuse the same wrapper and avoid re-checking availability
-      segments.each_with_index do |seg, idx|
-        log "Downloading segment #{idx + 1}/#{segments.size}: #{seg[:start]}-#{seg[:end]}s"
-        
-        begin
-          output_file = download_segment_with_ytdlp(seg[:start], seg[:end], seg[:output_file])
-          output_files << output_file
-        rescue => e
-          log "Failed to download segment #{idx}: #{e.message}"
-          raise
-        end
-      end
-      
-      output_files
-    end
-
-    def download_segments_with_ruby(segments)
-      log "Using pure Ruby backend for batch segment download"
-      
-      @video_info = @extractor.extract_info
-      output_files = []
-
       begin
-        # Get full video once (cached if enabled)
-        full_video_path = get_full_video_for_segmentation
+        # Download full video once using yt-dlp (handles all YouTube protection)
+        full_video_path = get_full_video_for_segmentation_with_ytdlp
         
-        # Extract all segments from the same video file
+        # Extract all segments locally using FFmpeg (fast and efficient)
         segments.each_with_index do |seg, idx|
           start_time = seg[:start]
           end_time = seg[:end]
@@ -239,7 +186,7 @@ module YoutubeRb
           
           log "Extracting segment #{idx + 1}/#{segments.size}: #{start_time}-#{end_time}s"
           
-          # Extract segment using ffmpeg
+          # Extract segment using ffmpeg (same as Pure Ruby backend)
           extract_segment(full_video_path, output_file, start_time, end_time)
           
           # Download subtitles for segment if requested
@@ -253,9 +200,10 @@ module YoutubeRb
         # Clean up cache if not enabled
         cleanup_video_cache unless @options.cache_full_video
       end
-
+      
       output_files
     end
+
 
     def handle_ytdlp_error(error, fallback: nil)
       log "yt-dlp error: #{error.message}"
@@ -630,17 +578,20 @@ module YoutubeRb
       duration >= @options.min_segment_duration && duration <= @options.max_segment_duration
     end
 
-    def get_full_video_for_segmentation
+    def get_full_video_for_segmentation_with_ytdlp
       # Return cached video if available
       if @cached_video_path && File.exist?(@cached_video_path)
         log "Using cached video: #{@cached_video_path}"
         return @cached_video_path
       end
       
-      # Download full video
+      # Extract video info first (needed for segment naming)
+      @video_info ||= @extractor.extract_info
+      
+      # Download full video using yt-dlp
       @cached_video_path = generate_cache_path
-      log "Downloading full video for segmentation: #{@cached_video_path}"
-      download_video(@cached_video_path)
+      log "Downloading full video via yt-dlp for segmentation: #{@cached_video_path}"
+      ytdlp_wrapper.download(@url, @cached_video_path)
       
       @cached_video_path
     end

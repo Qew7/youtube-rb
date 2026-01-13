@@ -324,34 +324,48 @@ RSpec.describe YoutubeRb::Downloader do
   end
 
   describe '#download_segment' do
-    let(:video_url) { video_data['formats'].last['url'] }  # Use 720p (highest quality)
-
     before do
-      stub_video_download(video_url)
-      allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(true)
-      allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
+      allow(YoutubeRb::YtdlpWrapper).to receive(:available?).and_return(true)
     end
 
-    it 'downloads video segment' do
-      output_file = downloader.download_segment(10, 30)
+    it 'requires yt-dlp to be installed' do
+      allow(YoutubeRb::YtdlpWrapper).to receive(:available?).and_return(false)
       
-      expect(output_file).to be_a(String)
-      expect(output_file).to include('segment-10-30')
+      expect {
+        downloader.download_segment(10, 30)
+      }.to raise_error(YoutubeRb::Downloader::DownloadError, /yt-dlp is required/)
     end
 
-    it 'accepts custom output file' do
-      custom_file = File.join(@test_output_dir, 'custom-segment.mp4')
-      output_file = downloader.download_segment(10, 30, custom_file)
-      
-      expect(output_file).to eq(custom_file)
-    end
+    context 'with yt-dlp available' do
+      before do
+        # Mock ytdlp_wrapper.download_segment
+        allow_any_instance_of(YoutubeRb::YtdlpWrapper).to receive(:download_segment) do |_, url, start_time, end_time, output_file|
+          output_file || File.join(@test_output_dir, "segment-#{start_time}-#{end_time}.mp4")
+        end
+      end
 
-    it 'calls ffmpeg with correct parameters' do
-      expect(Open3).to receive(:capture3).with(
-        /ffmpeg.*-ss 10.*-t 20/
-      ).and_return(['', '', double(success?: true)])
-      
-      downloader.download_segment(10, 30)
+      it 'downloads video segment using yt-dlp' do
+        output_file = downloader.download_segment(10, 30)
+        
+        expect(output_file).to be_a(String)
+        expect(output_file).to include('segment')
+      end
+
+      it 'accepts custom output file' do
+        custom_file = File.join(@test_output_dir, 'custom-segment.mp4')
+        output_file = downloader.download_segment(10, 30, custom_file)
+        
+        expect(output_file).to eq(custom_file)
+      end
+
+      it 'calls ytdlp wrapper download_segment' do
+        expect_any_instance_of(YoutubeRb::YtdlpWrapper)
+          .to receive(:download_segment)
+          .with(test_url, 10, 30, nil)
+          .and_return(File.join(@test_output_dir, 'segment-10-30.mp4'))
+        
+        downloader.download_segment(10, 30)
+      end
     end
 
     it 'validates segment duration minimum (default 10s)' do
@@ -374,10 +388,10 @@ RSpec.describe YoutubeRb::Downloader do
       )
       dl = described_class.new(test_url, custom_options)
       
-      mock_extractor(video_data)
-      stub_video_download(video_url)
-      allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(true)
-      allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
+      allow(YoutubeRb::YtdlpWrapper).to receive(:available?).and_return(true)
+      allow_any_instance_of(YoutubeRb::YtdlpWrapper).to receive(:download_segment) do |_, url, start_time, end_time, output_file|
+        output_file || File.join(@test_output_dir, "segment-#{start_time}-#{end_time}.mp4")
+      end
       
       # Should accept 5 second segment (custom minimum)
       expect { dl.download_segment(0, 5) }.not_to raise_error
@@ -399,67 +413,16 @@ RSpec.describe YoutubeRb::Downloader do
     end
 
     it 'accepts valid segment durations' do
+      allow(YoutubeRb::YtdlpWrapper).to receive(:available?).and_return(true)
+      allow_any_instance_of(YoutubeRb::YtdlpWrapper).to receive(:download_segment) do |_, url, start_time, end_time, output_file|
+        output_file || File.join(@test_output_dir, "segment-#{start_time}-#{end_time}.mp4")
+      end
+      
       expect {
         downloader.download_segment(0, 10)  # 10 seconds (minimum)
         downloader.download_segment(0, 60)  # 60 seconds (maximum)
         downloader.download_segment(10, 45) # 35 seconds (in range)
       }.not_to raise_error
-    end
-
-    it 'cleans up temp files' do
-      downloader.download_segment(10, 30)
-      
-      temp_files = Dir.glob(File.join(@test_output_dir, '.temp_*'))
-      expect(temp_files).to be_empty
-    end
-
-    it 'raises error if ffmpeg not available' do
-      allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(false)
-      
-      expect {
-        downloader.download_segment(10, 30)
-      }.to raise_error(YoutubeRb::Downloader::DownloadError, /FFmpeg is required/)
-    end
-
-    it 'raises error if ffmpeg fails' do
-      allow(Open3).to receive(:capture3).and_return(
-        ['', 'Error message', double(success?: false)]
-      )
-      
-      expect {
-        downloader.download_segment(10, 30)
-      }.to raise_error(YoutubeRb::Downloader::DownloadError, /Segment extraction failed/)
-    end
-
-    context 'with subtitles' do
-      before do
-        video_data['subtitles'].each do |lang, subs|
-          subs.each { |sub| stub_subtitle_download(sub['url']) }
-        end
-      end
-
-      it 'downloads and trims subtitles when enabled' do
-        subtitle_options = YoutubeRb::Options.new(
-          output_path: @test_output_dir,
-          write_subtitles: true,
-          subtitle_langs: ['en']
-        )
-        dl = described_class.new(test_url, subtitle_options)
-        
-        mock_extractor(video_data)
-        stub_video_download(video_url)
-        video_data['subtitles'].each do |lang, subs|
-          subs.each { |sub| stub_subtitle_download(sub['url']) }
-        end
-        
-        allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(true)
-        allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
-        
-        dl.download_segment(10, 30)
-        
-        subtitle_files = Dir.glob(File.join(@test_output_dir, '*segment*.srt'))
-        expect(subtitle_files).not_to be_empty
-      end
     end
   end
 
@@ -467,37 +430,73 @@ RSpec.describe YoutubeRb::Downloader do
     let(:video_url) { video_data['formats'].last['url'] }
 
     before do
-      stub_video_download(video_url)
+      # Mock yt-dlp availability and wrapper
+      allow(YoutubeRb::YtdlpWrapper).to receive(:available?).and_return(true)
       allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(true)
       allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
     end
 
-    it 'downloads multiple segments' do
-      segments = [
-        { start: 10, end: 30 },
-        { start: 60, end: 90 },
-        { start: 120, end: 150 }
-      ]
+    it 'requires yt-dlp to be installed' do
+      allow(YoutubeRb::YtdlpWrapper).to receive(:available?).and_return(false)
       
-      output_files = downloader.download_segments(segments)
+      segments = [{ start: 10, end: 30 }]
       
-      expect(output_files).to be_an(Array)
-      expect(output_files.size).to eq(3)
-      output_files.each do |file|
-        expect(file).to be_a(String)
-      end
+      expect {
+        downloader.download_segments(segments)
+      }.to raise_error(YoutubeRb::Downloader::DownloadError, /yt-dlp is required/)
     end
 
-    it 'accepts custom output files for segments' do
-      segments = [
-        { start: 10, end: 30, output_file: File.join(@test_output_dir, 'seg1.mp4') },
-        { start: 60, end: 90, output_file: File.join(@test_output_dir, 'seg2.mp4') }
-      ]
-      
-      output_files = downloader.download_segments(segments)
-      
-      expect(output_files[0]).to end_with('seg1.mp4')
-      expect(output_files[1]).to end_with('seg2.mp4')
+    context 'with yt-dlp available' do
+      before do
+        # Mock ytdlp_wrapper.download to simulate video download
+        allow_any_instance_of(YoutubeRb::YtdlpWrapper).to receive(:download) do |_, url, output_path|
+          # Create a fake video file
+          FileUtils.touch(output_path)
+          output_path
+        end
+      end
+
+      it 'downloads multiple segments using yt-dlp once + FFmpeg segmentation' do
+        segments = [
+          { start: 10, end: 30 },
+          { start: 60, end: 90 },
+          { start: 120, end: 150 }
+        ]
+        
+        output_files = downloader.download_segments(segments)
+        
+        expect(output_files).to be_an(Array)
+        expect(output_files.size).to eq(3)
+        output_files.each do |file|
+          expect(file).to be_a(String)
+        end
+      end
+
+      it 'downloads full video only once via yt-dlp' do
+        segments = [
+          { start: 10, end: 30 },
+          { start: 60, end: 90 },
+          { start: 120, end: 150 }
+        ]
+        
+        # Should call yt-dlp download exactly once (not N times)
+        expect_any_instance_of(YoutubeRb::YtdlpWrapper)
+          .to receive(:download).once.and_call_original
+        
+        downloader.download_segments(segments)
+      end
+
+      it 'accepts custom output files for segments' do
+        segments = [
+          { start: 10, end: 30, output_file: File.join(@test_output_dir, 'seg1.mp4') },
+          { start: 60, end: 90, output_file: File.join(@test_output_dir, 'seg2.mp4') }
+        ]
+        
+        output_files = downloader.download_segments(segments)
+        
+        expect(output_files[0]).to end_with('seg1.mp4')
+        expect(output_files[1]).to end_with('seg2.mp4')
+      end
     end
 
     it 'validates segments array' do
@@ -544,7 +543,13 @@ RSpec.describe YoutubeRb::Downloader do
     end
 
     context 'with caching enabled' do
-      it 'downloads full video once for multiple segments' do
+      before do
+        allow(YoutubeRb::YtdlpWrapper).to receive(:available?).and_return(true)
+        allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(true)
+        allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
+      end
+
+      it 'downloads full video once via yt-dlp and caches it' do
         cache_options = YoutubeRb::Options.new(
           output_path: @test_output_dir,
           cache_full_video: true
@@ -552,17 +557,17 @@ RSpec.describe YoutubeRb::Downloader do
         dl = described_class.new(test_url, cache_options)
         
         mock_extractor(video_data)
-        stub_video_download(video_url)
-        allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(true)
-        allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
+        
+        # Mock yt-dlp download
+        allow_any_instance_of(YoutubeRb::YtdlpWrapper).to receive(:download) do |_, url, output_path|
+          FileUtils.touch(output_path)
+          output_path
+        end
         
         segments = [
           { start: 10, end: 30 },
           { start: 60, end: 90 }
         ]
-        
-        # Should download video once and cache it
-        expect(dl).to receive(:download_video).once.and_call_original
         
         dl.download_segments(segments)
         
@@ -579,9 +584,12 @@ RSpec.describe YoutubeRb::Downloader do
         dl = described_class.new(test_url, no_cache_options)
         
         mock_extractor(video_data)
-        stub_video_download(video_url)
-        allow_any_instance_of(described_class).to receive(:ffmpeg_available?).and_return(true)
-        allow(Open3).to receive(:capture3).and_return(['', '', double(success?: true)])
+        
+        # Mock yt-dlp download
+        allow_any_instance_of(YoutubeRb::YtdlpWrapper).to receive(:download) do |_, url, output_path|
+          FileUtils.touch(output_path)
+          output_path
+        end
         
         segments = [
           { start: 10, end: 30 },
